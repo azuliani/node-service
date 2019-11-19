@@ -146,7 +146,7 @@ class SharedObjectClient extends EventEmitter {
                 }
                 self.ready = true;
                 self._tryApply();
-                self.emit('init', self._v);
+                self.emit('init', {v: answer.res.v, data: answer.res.data});
             });
         });
 
