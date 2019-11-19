@@ -32,6 +32,12 @@ class SharedObjectClient extends EventEmitter {
 
     _processMessage(data) {
         if (data.endpoint == "_SO_" + this.endpoint.name) {
+
+            this.emit('raw', {
+                v: data.message.v,
+                diffs: data.message.diffs
+            });
+
             var idx = data.message.v - (this._v + 1);
             if (this.ready && idx < 0) {
                 console.error("(" + this.endpoint.name + ") Bad version! Reinit!");
@@ -140,7 +146,7 @@ class SharedObjectClient extends EventEmitter {
                 }
                 self.ready = true;
                 self._tryApply();
-                self.emit('init');
+                self.emit('init', self._v);
             });
         });
 
