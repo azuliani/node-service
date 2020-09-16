@@ -5,7 +5,7 @@ var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
 
-const REPORTEVERY = 200;
+const REPORTEVERY = 2000;
 
 class SharedObjectClient extends EventEmitter {
     constructor(endpoint, transports) {
