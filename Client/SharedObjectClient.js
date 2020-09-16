@@ -5,6 +5,8 @@ var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
 
+const REPORTEVERY = 200;
+
 class SharedObjectClient extends EventEmitter {
     constructor(endpoint, transports) {
         super();
@@ -45,7 +47,6 @@ class SharedObjectClient extends EventEmitter {
             }
             this.procBuffer[idx] = data.message.diffs;
             this.timeBuffer[idx] = data.message.now;
-            this.emit('timing', (new Date() - data.message.now) * 1000000);
             this.outstandingDiffs++;
             process.nextTick(this._tryApply.bind(this));
         }
@@ -66,17 +67,20 @@ class SharedObjectClient extends EventEmitter {
 
             this.timeSum += new Date() - this.timeBuffer.shift();
             this.timeCount++;
-            if (this.timeCount == 200) {
-                console.log("(" + this.endpoint.name + ") Average time: " + (this.timeSum / 200) + " ms");
-                this.timeSum = 0;
-                this.timeCount = 0;
-            }
 
             this._v++;
         }
 
         if (totalDiffs.length > 0) {
             this.emit('update', totalDiffs);
+
+            if (this.timeCount > REPORTEVERY) {
+                console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
+                this.emit('timing', this.timeSum / this.timeCount);
+                this.timeSum = 0;
+                this.timeCount = 0;
+            }
+
         } else if (this.ready && this.outstandingDiffs > 10) {
             console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
             this._init();
