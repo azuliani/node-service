@@ -1,5 +1,6 @@
 "use strict";
 
+var assert = require("assert");
 var clone = require("../misc/clone");
 var doValidate = require("../misc/Validation").SharedObjectValidation;
 var differ = require("deep-diff");
@@ -29,7 +30,7 @@ class SharedObjectService{
         }
     }
 
-    notify(hint){
+    notify(hint, dirtyBypass){
         var now = new Date();
 
         if (!hint)
@@ -37,7 +38,8 @@ class SharedObjectService{
 
         doValidate(this.endpoint, this.data, hint);
 
-        var diffs = diffAndReverseAndApplyWithHint(this._lastTransmit, this.data, hint);
+        var diffs = diffAndReverseAndApplyWithHint(this._lastTransmit, this.data, hint, dirtyBypass);
+
         if (diffs && diffs.length) {
             this.stats.updates++;
             this._v++;
@@ -56,9 +58,10 @@ class SharedObjectService{
     }
 }
 
-function diffAndReverseAndApplyWithHint(lhs, rhs, hint){
+function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
     var lhsWithHint = lhs;
     var rhsWithHint = rhs;
+    var lhsParent = null;
     var i = 0;
 
     while(i < hint.length){
@@ -66,6 +69,8 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint){
         if (!(hint[i] in lhsWithHint) || !(hint[i] in rhsWithHint)){
             break
         }
+
+        lhsParent = lhsWithHint;
 
         lhsWithHint = lhsWithHint[hint[i]];
         rhsWithHint = rhsWithHint[hint[i]];
@@ -87,20 +92,32 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint){
          }else{
              throw new Error("Wut?");
          }
-    }else {
-
-        var diffs = differ(lhsWithHint, rhsWithHint);
-
-        if (diffs) {
-            for (var i = diffs.length - 1; i >= 0; i--) {
-                var diff = clone(diffs[i]);
-                if (diff.path)
-                    diff.path = hintUsed.concat(diff.path);
-                else
-                    diff.path = hintUsed;
-                differ.applyChange(lhs, rhs, diff);
-                reportDiffs.push(diff);
+    } else {
+        if (!bypass) {
+            var diffs = differ(lhsWithHint, rhsWithHint);
+            if (diffs) {
+                for (let i = diffs.length - 1; i >= 0; i--) {
+                    var diff = clone(diffs[i]);
+                    if (diff.path)
+                        diff.path = hintUsed.concat(diff.path);
+                    else
+                        diff.path = hintUsed;
+                    differ.applyChange(lhs, rhs, diff);
+                    reportDiffs.push(diff);
+                }
             }
+        } else {
+            // BYPASS
+            assert(lhsParent && hint[0]);
+
+            reportDiffs.push({
+                kind: 'N',
+                path: hint,
+                rhs: rhsWithHint
+            });
+
+            lhsParent[hint[hint.length-1]] = rhsWithHint;
+
         }
     }
 

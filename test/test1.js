@@ -156,6 +156,7 @@ c.RPCTest.call("Hello", function (err, res) {
         s.SO.data.rand = Math.random();
         s.SO.data.now = new Date();
         s.SO.data.message = "Last thing you said was " + lastMSG;
+        s.SO.notify(['rand'], true);
         s.SO.notify();
     }, 1000);
 
