@@ -80,10 +80,7 @@ class Client {
         for(let endpoint of this.descriptor.endpoints) {
             if (endpoint.type == 'Source' || endpoint.type == 'SharedObject') {
                 console.log(endpoint.name, 'connected');
-                this[endpoint.name].emit('connected')
-                if (endpoint.type == 'SharedObject') {
-                    if(this[endpoint.name].ready == false && this[endpoint.name].subscribed) this[endpoint.name]._init();
-                }
+                this[endpoint.name].emit('connected');
             }
         }
     }
