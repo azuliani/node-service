@@ -33,7 +33,7 @@ class SharedObjectClient extends EventEmitter {
     }
 
     _processMessage(data) {
-        if (data.endpoint == "_SO_" + this.endpoint.name) {
+        if (data.endpoint === "_SO_" + this.endpoint.name) {
 
             this.emit('raw', {
                 v: data.message.v,
@@ -48,7 +48,7 @@ class SharedObjectClient extends EventEmitter {
             this.procBuffer[idx] = data.message.diffs;
             this.timeBuffer[idx] = data.message.now;
             this.outstandingDiffs++;
-            process.nextTick(this._tryApply.bind(this));
+            setImmediate(this._tryApply.bind(this));
         }
     }
 
@@ -57,9 +57,9 @@ class SharedObjectClient extends EventEmitter {
 
         while (!!this.procBuffer[0]) {
             // Diffs are already reversed by Server!
-            var diffs = this.procBuffer.shift();
+            let diffs = this.procBuffer.shift();
             this.outstandingDiffs--;
-            totalDiffs = diffs.concat(totalDiffs);
+            totalDiffs.push(...diffs);
 
             for (let diff of diffs) {
                 differ.applyChange(this.data, true, diff);
