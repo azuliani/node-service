@@ -52,24 +52,70 @@ class SharedObjectClient extends EventEmitter {
         }
     }
 
+    /*
+   _oldTryApply() {
+       var totalDiffs = [];
+       let now = new Date();
+
+       while (!!this.procBuffer[0]) {
+           // Diffs are already reversed by Server!
+           let diffs = this.procBuffer.shift();
+           this.outstandingDiffs--;
+           totalDiffs.push(...diffs);
+           //totalDiffs = totalDiffs.concat(diffs);
+
+           for (let diff of diffs) {
+               differ.applyChange(this.data, true, diff);
+           }
+
+           this.timeSum += now - this.timeBuffer.shift();
+           this.timeCount++;
+
+           this._v++;
+       }
+
+       if (totalDiffs.length > 0) {
+           this.emit('update', totalDiffs);
+
+           if (this.timeCount > REPORTEVERY) {
+               console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
+               this.emit('timing', this.timeSum / this.timeCount);
+               this.timeSum = 0;
+               this.timeCount = 0;
+           }
+
+       } else if (this.ready && this.outstandingDiffs > 10) {
+           console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
+           this._init();
+       }
+   }
+   */
+
     _tryApply() {
         var totalDiffs = [];
+        let now = new Date();
 
-        while (!!this.procBuffer[0]) {
+        let i = 0;
+        while (!!this.procBuffer[i]) {
             // Diffs are already reversed by Server!
-            let diffs = this.procBuffer.shift();
+            let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
             totalDiffs.push(...diffs);
+            //totalDiffs = totalDiffs.concat(diffs);
 
-            for (let diff of diffs) {
-                differ.applyChange(this.data, true, diff);
+            for (let j = 0; j < diffs.length; j++) {
+                differ.applyChange(this.data, true, diffs[j]);
             }
 
-            this.timeSum += new Date() - this.timeBuffer.shift();
+            this.timeSum += now - this.timeBuffer[i];
             this.timeCount++;
 
             this._v++;
+            i++;
         }
+
+        this.procBuffer.splice(0, i);
+        this.timeBuffer.splice(0, i);
 
         if (totalDiffs.length > 0) {
             this.emit('update', totalDiffs);
