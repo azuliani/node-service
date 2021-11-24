@@ -1,5 +1,4 @@
 var service = require("../index");
-var heapdump = require("heapdump");
 
 var SharedObjectSchema = {
     type: 'object',
@@ -51,37 +50,23 @@ var initials = {
     }
 };
 
-var c = new service.Client(descriptor);
+var s = new service.Service(descriptor, {}, initials);
 
 /**
  * SharedObject test
  */
 
-c.SO.on('init',()=>{
-    console.log("Client object was initialised:",c.SO.data);
-});
+function thing() {
+    s.SO.data.rand = Math.random();
+    s.SO.data.now = new Date();
+    s.SO.data.message = "Last thing you said was " + lastMSG;
+    s.SO.notify();
+    setImmediate(thing);
+}
 
-c.SO.on('update',(oldVal, newVal, diffs) => {
-    //console.log("Client object was updated:", c.SO.data);
-    var a = 0;
-    for(var i = 0; i<50000000; i++){
-        a++;
-    }
-});
+setTimeout(() => {
+    console.log("Starting the thing now.");
+    thing();
+},20000);
 
-c.SO.subscribe()
 
-setInterval(() => {
-    console.log("DATA",new Date(), c.SO.data);
-}, 5000);
-
-/*
-setInterval(function(){
-    console.log("Doing longthing");
-    var a = 0;
-    for(var i = 0; i<1000000000; i++){
-        a++;
-    }
-    console.log("Done longthing " + a);
-},5000);
-*/

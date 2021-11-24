@@ -148,16 +148,17 @@ c.RPCTest.call("Hello", function (err, res) {
         console.log("Client object was initialised:", c.SO.data);
     });
 
-    c.SO.on('update', (oldVal, newVal, diffs) => {
-        console.log("Client object was updated:", c.SO.data);
+    c.SO.on('update', (diffs) => {
+        console.log("Client object was updated:", diffs);
     });
     c.SO.subscribe()
     setInterval(function () {
         s.SO.data.rand = Math.random();
         s.SO.data.now = new Date();
         s.SO.data.message = "Last thing you said was " + lastMSG;
-        s.SO.notify(['rand'], true);
-        s.SO.notify();
+        //s.SO.notify(['rand'], true);
+        s.SO.notify(['somethingstupid']);
+        //s.SO.notify();
     }, 1000);
 
 });

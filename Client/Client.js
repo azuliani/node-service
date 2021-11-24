@@ -20,6 +20,8 @@ class Client {
         this.descriptor = descriptor;
         this.transports = {};
 
+        this.sourceDisconnections = {};
+
         this._setupTransports();
         this._setupEndpoints();
     }
@@ -78,9 +80,13 @@ class Client {
         // this._heartbeatTimeout = setTimeout(this._heartbeatFailed.bind(this), HEARTBEAT_SECONDS * 1000);
         // Loop endpoints
         for(let endpoint of this.descriptor.endpoints) {
-            if (endpoint.type == 'Source' || endpoint.type == 'SharedObject') {
-                console.log(endpoint.name, 'connected');
+            if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
+                console.error(endpoint.name, 'connected');
                 this[endpoint.name].emit('connected');
+                if (endpoint.type === 'SharedObject' && this.sourceDisconnections[endpoint.name]) {
+                    this[endpoint.name]._init();
+                    delete this.sourceDisconnections[endpoint.name];
+                }
             }
         }
     }
@@ -89,11 +95,12 @@ class Client {
         clearTimeout(this._heartbeatTimeout);
         // Loop endpoints
         for(let endpoint of this.descriptor.endpoints) {
-            if (endpoint.type == 'Source' || endpoint.type == 'SharedObject') {
-                console.log(endpoint.name, 'disconnected');
+            if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
+                console.error(endpoint.name, 'disconnected');
                 this[endpoint.name].emit('disconnected');
-                if (endpoint.type == 'SharedObject') {
+                if (endpoint.type === 'SharedObject') {
                     this[endpoint.name]._flushData();
+                    this.sourceDisconnections[endpoint.name] = true;
                 }
             }
         }

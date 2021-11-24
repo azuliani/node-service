@@ -16,7 +16,7 @@ class MonitoredSocket extends EventEmitter {
     }
 
     _handleError(err) {
-        console.log('Error in monitoring: %s, will restart monitoring in 5 seconds', err);
+        console.error('Error in monitoring: %s, will restart monitoring in 5 seconds', err);
         setTimeout(this._monitorSocket.bind(this), 5000);
     }
 

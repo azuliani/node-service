@@ -186,7 +186,7 @@ class SharedObjectClient extends EventEmitter {
                 var answer = JSON.parse(body);
                 self.data = answer.res.data;
                 self._v = answer.res.v;
-                console.log("(" + self.endpoint.name + ") Init installed version", self._v);
+                console.error("(" + self.endpoint.name + ") Init installed version", self._v);
                 self.procBuffer.splice(0, self._v);
                 self.timeBuffer.splice(0, self._v);
                 self.outstandingDiffs = 0;
