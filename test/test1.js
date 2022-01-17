@@ -154,21 +154,28 @@ c.RPCTest.call("Hello", function (err, res) {
      * SharedObject test
      */
 
-    c.SO.on('init', ()=> {
-        console.log("Client object was initialised:", c.SO.data);
-    });
+    setTimeout(() => {
+        console.log("Making the client now");
 
-    c.SO.on('update', (diffs) => {
-        console.log("Client object was updated:", diffs);
-    });
-    c.SO.subscribe()
+        c.SO.on('init', ()=> {
+            console.log("Client object was initialised:", c.SO.data);
+        });
+
+        c.SO.on('update', (diffs) => {
+            console.log("Client object was updated:", diffs);
+            console.log(c.SO.data);
+        });
+        c.SO.subscribe()
+    }, 1000);
+
     setInterval(function () {
         s.SO.data.rand = Math.random();
         s.SO.data.now = new Date();
         s.SO.data.message = "Last thing you said was " + lastMSG;
         //s.SO.notify(['rand'], true);
         //s.SO.notify(['somethingstupid']);
-        s.SO.notify();
+        //s.SO.notify();
     }, 1000);
-
 });
+
+

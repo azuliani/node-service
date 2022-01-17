@@ -45,17 +45,17 @@ function SourceSinkValidation(endpoint, obj, parseDates){
     assert(parseDates === true || parseDates === false);
 
     var schema = endpoint.messageSchema;
+
+    if(schema.skip){
+        return
+    }
+
     if (schema && !endpoint.datePaths) {
         endpoint.datePaths = extractDatepaths(schema);
     }
 
     if (!schema){
         console.error("There's no schema for Source/Sink " + endpoint.name + ". Fix this!");
-    }
-
-    // Check if we need to run validation
-    if(schema.skip){
-        return
     }
 
     if (parseDates && endpoint.datePaths && endpoint.datePaths.length) {
@@ -139,6 +139,32 @@ function parseDiffDates(endpoint, diff) {
     }
 }
 
+function parseFullDates(endpoint, obj) {
+    assert(endpoint.objectSchema);
+
+    var schema = endpoint.objectSchema;
+
+    if(schema.skip){
+        return
+    }
+
+    if (schema && !endpoint.datePaths) {
+        endpoint.datePaths = extractDatepaths(schema);
+    }
+
+    if (endpoint.datePaths && endpoint.datePaths.length) {
+        for(let path of endpoint.datePaths) {
+            applyDatepath(path, obj);
+        }
+    }
+
+    var validation = inspector.validate(schema, obj);
+
+    if (!validation.valid){
+        throw new Error("Validation failed! " + validation.format());
+    }
+}
+
 function _getSubsForHint(schema, obj, hint){
     var i = 0;
     while(i < hint.length){
@@ -172,7 +198,8 @@ function _getSubsForHint(schema, obj, hint){
 module.exports = {
     RPCValidation,
     SharedObjectValidation,
-    parseDiffDates: parseDiffDates,
+    parseDiffDates,
+    parseFullDates,
     SourceValidation: SourceSinkValidation,
     SinkValidation: SourceSinkValidation
 };

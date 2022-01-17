@@ -4,6 +4,7 @@ var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
 var parseDiffDates = require("../misc/Validation").parseDiffDates;
+var parseFullDates = require("../misc/Validation").parseFullDates;
 
 const REPORTEVERY = 2000;
 
@@ -135,9 +136,13 @@ class SharedObjectClient extends EventEmitter {
             });
             reply.on('end', function () {
                 var answer = JSON.parse(body);
+
+                parseFullDates(self.endpoint, answer.res.data);
                 self.data = answer.res.data;
                 self._v = answer.res.v;
+
                 console.error("(" + self.endpoint.name + ") Init installed version", self._v);
+
                 self.procBuffer.splice(0, self._v);
                 self.timeBuffer.splice(0, self._v);
                 self.outstandingDiffs = 0;
