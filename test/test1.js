@@ -25,6 +25,15 @@ var SourceSchema = {
         },
         rand: {
             type: 'number'
+        },
+        arr: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    "*": {type: "date"}
+                }
+            }
         }
     }
 };
@@ -135,7 +144,8 @@ c.RPCTest.call("Hello", function (err, res) {
     setInterval(function () {
         s.Sourcetest.send({
             message: "This is a message",
-            rand: Math.random()
+            rand: Math.random(),
+            arr: [{dit:new Date(), ori: new Date(0)},{dat:new Date(123000), bloe: new Date(900000)}]
         });
     }, 2000);
 
@@ -157,8 +167,8 @@ c.RPCTest.call("Hello", function (err, res) {
         s.SO.data.now = new Date();
         s.SO.data.message = "Last thing you said was " + lastMSG;
         //s.SO.notify(['rand'], true);
-        s.SO.notify(['somethingstupid']);
-        //s.SO.notify();
+        //s.SO.notify(['somethingstupid']);
+        s.SO.notify();
     }, 1000);
 
 });

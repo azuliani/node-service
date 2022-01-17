@@ -18,7 +18,8 @@ class RPCClient {
             timeout = 10e3;
         }
 
-        doValidation(this.endpoint, 'input', input);
+        doValidation(this.endpoint, 'input', input, false);
+
         var answer_received = false;
         var answer_timeout = setTimeout(() => {
             if (!answer_received)
@@ -52,8 +53,10 @@ class RPCClient {
             answer.on('end', function () {
                 var answer = JSON.parse(body);
 
-                if (!answer.err)
-                    doValidation(self.endpoint, 'output', answer.res);
+                if (!answer.err) {
+                    doValidation(self.endpoint, 'output', answer.res, true);
+                }
+
                 if (callback) {
                     callback(answer.err, answer.res);
                 }
@@ -73,10 +76,6 @@ class RPCClient {
         });
         req.write(postData);
         req.end();
-    }
-
-    handleRpcReply(req) {
-
     }
 }
 

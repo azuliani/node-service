@@ -1,6 +1,7 @@
 "use strict";
 
 var EventEmitter = require("events").EventEmitter;
+var doValidate = require("../misc/Validation").SourceValidation;
 
 class SourceClient extends EventEmitter{
     constructor(endpoint, transports){
@@ -19,8 +20,9 @@ class SourceClient extends EventEmitter{
         this.transport.unsubscribe(this.endpoint.name);
     };
     _processMessage(data){
-        if (this.endpoint.name == data.endpoint){
-            this.emit('message',data.message);
+        if (this.endpoint.name === data.endpoint){
+            doValidate(this.endpoint, data.message, true);
+            this.emit('message', data.message);
         }
     }
 }

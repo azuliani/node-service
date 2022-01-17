@@ -1,6 +1,6 @@
 "use strict";
 
-var doValidation = require("../misc/Validation").PushValidation;
+var doValidation = require("../misc/Validation").SinkValidation;
 
 class SourceService{
     constructor(endpoint, transports){

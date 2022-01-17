@@ -1,5 +1,4 @@
 var service = require("../index");
-var heapdump = require("heapdump");
 
 var SharedObjectSchema = {
     type: 'object',
@@ -64,9 +63,9 @@ c.SO.on('init',()=>{
 c.SO.on('update',(oldVal, newVal, diffs) => {
     //console.log("Client object was updated:", c.SO.data);
     var a = 0;
-    for(var i = 0; i<50000000; i++){
-        a++;
-    }
+    //for(var i = 0; i<50000000; i++){
+    //    //a++;
+    //}
 });
 
 c.SO.subscribe()

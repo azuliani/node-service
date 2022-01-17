@@ -1,9 +1,9 @@
 "use strict";
-const NS_PER_SEC = 1e9;
 
 var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
+var parseDiffDates = require("../misc/Validation").parseDiffDates;
 
 const REPORTEVERY = 2000;
 
@@ -46,50 +46,11 @@ class SharedObjectClient extends EventEmitter {
                 return this._init();
             }
             this.procBuffer[idx] = data.message.diffs;
-            this.timeBuffer[idx] = data.message.now;
+            this.timeBuffer[idx] = new Date(data.message.now);
             this.outstandingDiffs++;
             setImmediate(this._tryApply.bind(this));
         }
     }
-
-    /*
-   _oldTryApply() {
-       var totalDiffs = [];
-       let now = new Date();
-
-       while (!!this.procBuffer[0]) {
-           // Diffs are already reversed by Server!
-           let diffs = this.procBuffer.shift();
-           this.outstandingDiffs--;
-           totalDiffs.push(...diffs);
-           //totalDiffs = totalDiffs.concat(diffs);
-
-           for (let diff of diffs) {
-               differ.applyChange(this.data, true, diff);
-           }
-
-           this.timeSum += now - this.timeBuffer.shift();
-           this.timeCount++;
-
-           this._v++;
-       }
-
-       if (totalDiffs.length > 0) {
-           this.emit('update', totalDiffs);
-
-           if (this.timeCount > REPORTEVERY) {
-               console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
-               this.emit('timing', this.timeSum / this.timeCount);
-               this.timeSum = 0;
-               this.timeCount = 0;
-           }
-
-       } else if (this.ready && this.outstandingDiffs > 10) {
-           console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
-           this._init();
-       }
-   }
-   */
 
     _tryApply() {
         var totalDiffs = [];
@@ -100,11 +61,11 @@ class SharedObjectClient extends EventEmitter {
             // Diffs are already reversed by Server!
             let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
-            totalDiffs.push(...diffs);
-            //totalDiffs = totalDiffs.concat(diffs);
+            totalDiffs = [...totalDiffs, ...diffs];
 
-            for (let j = 0; j < diffs.length; j++) {
-                differ.applyChange(this.data, true, diffs[j]);
+            for(let diff of diffs) {
+                parseDiffDates(this.endpoint, diff);
+                differ.applyChange(this.data, true, diff);
             }
 
             this.timeSum += now - this.timeBuffer[i];
@@ -149,17 +110,7 @@ class SharedObjectClient extends EventEmitter {
 
     _init() {
 
-        this.data = {};
-        this._v = 0;
-        this.procBuffer = [];
-        this.timeBuffer = [];
-
-        this.timeSum = 0;
-        this.timeCount = 0;
-
-        this.outstandingDiffs = 0;
-
-        this.ready = false;
+        this._flushData();
 
         var postData = JSON.stringify({
             endpoint: "_SO_" + this.endpoint.name,

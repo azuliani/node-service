@@ -1,7 +1,7 @@
 "use strict";
 
 var assert = require("assert");
-var clone = require("../misc/clone");
+var fastcopy = require("fast-copy");
 var doValidate = require("../misc/Validation").SharedObjectValidation;
 var differ = require("deep-diff");
 
@@ -12,7 +12,7 @@ class SharedObjectService{
 
         doValidate(endpoint, initial);
         this.data = initial;
-        this._lastTransmit = clone(initial);
+        this._lastTransmit = fastcopy(initial);
         this._v = 0;
         this.endpoint = endpoint;
         transports.rpc.on('message', this._processRPC.bind(this));
@@ -21,8 +21,8 @@ class SharedObjectService{
     }
 
     _processRPC(message, reply){
-        if (message.endpoint == "_SO_" + this.endpoint.name){
-            if (message.input == "init"){
+        if (message.endpoint === "_SO_" + this.endpoint.name){
+            if (message.input === "init"){
                 reply({err:null, res:{data: this.data, v: this._v}});
             }else{
                 throw "Got bad data on RPC channel";
@@ -83,11 +83,11 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
 
     if (hintUsed.length < hint.length){ // SHORTCUT
          if (!(hint[i] in lhsWithHint) && (hint[i] in rhsWithHint)){ // SHORTCUT ADD
-             var cloned = clone(rhsWithHint[hint[i]]);
-             reportDiffs.push({kind: 'N', path: hintUsed.concat(hint[i]), rhs: cloned});
+             var cloned = fastcopy(rhsWithHint[hint[i]]);
+             reportDiffs.push({kind: 'N', path: [...hintUsed, hint[i]], rhs: cloned});
              lhsWithHint[hint[i]] = cloned
          }else if (!(hint[i] in rhsWithHint)){ // SHORTCUT DEL
-             reportDiffs.push({kind: 'D', path: hintUsed.concat(hint[i]), lhs: lhsWithHint[hint[i]]});
+             reportDiffs.push({kind: 'D', path: [...hintUsed, hint[i]], lhs: lhsWithHint[hint[i]]});
              delete lhsWithHint[hint[i]];
          }else{
              throw new Error("Wut?");
@@ -97,11 +97,12 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
             var diffs = differ(lhsWithHint, rhsWithHint);
             if (diffs) {
                 for (let i = diffs.length - 1; i >= 0; i--) {
-                    var diff = clone(diffs[i]);
-                    if (diff.path)
-                        diff.path = hintUsed.concat(diff.path);
-                    else
+                    var diff = fastcopy(diffs[i]);
+                    if (diff.path) {
+                        diff.path = [...hintUsed, ...diff.path];
+                    } else {
                         diff.path = hintUsed;
+                    }
                     differ.applyChange(lhs, rhs, diff);
                     reportDiffs.push(diff);
                 }

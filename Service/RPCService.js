@@ -1,5 +1,7 @@
 "use strict";
 
+var assert = require("assert");
+
 var doValidation = require("../misc/Validation").RPCValidation;
 
 class RPCService{
@@ -10,16 +12,16 @@ class RPCService{
     }
 
     call(data, callback){
-        if (this.endpoint.name != data.endpoint)
-            throw ("Wrong handler called!");
+        assert(this.endpoint.name === data.endpoint);
 
-        doValidation(this.endpoint, 'input', data.input);
+        doValidation(this.endpoint, 'input', data.input, true);
+
         this.stats.updates++;
 
         this.handler(data.input, (err, res) => {
 
             if (!err){
-                doValidation(this.endpoint, 'output', res);
+                doValidation(this.endpoint, 'output', res, false);
             }
 
             var reply = JSON.stringify({err,res});
