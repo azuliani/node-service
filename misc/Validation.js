@@ -124,7 +124,7 @@ function parseDiffDates(endpoint, diff) {
 
     if (diff.rhs) {
         for (let datePath of endpoint.slicedPaths[diff.path.length]) {
-            if (datePath[0] === diff.path[diff.path.length-1]) {
+            if (datePath[0] === diff.path[diff.path.length-1] || datePath[0] === "*") {
                 // Kinda yuk
                 let memo = datePath[0];
 

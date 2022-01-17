@@ -50,6 +50,16 @@ var SharedObjectSchema = {
         },
         now: {
             type: 'date'
+        },
+        subObjs: {
+            type: "object",
+            properties: {
+                '*': {type: "object",
+                    properties: {
+                        notADate: {type: "number"},
+                        isADate: {type: "date"}
+                    }}
+            }
         }
     }
 };
@@ -108,7 +118,13 @@ var initials = {
     SO: {
         message: "Last thing you said was *NOTHING*",
         rand: 0,
-        now: new Date()
+        now: new Date(),
+        subObjs: {
+            first: {
+                notADate: 1234,
+                isADate: new Date()
+            }
+        }
     }
 };
 
@@ -133,12 +149,18 @@ c.RPCTest.call("Hello", function (err, res) {
         });
     }, 5000);
 
+    setTimeout(() => {
+        s.SO.data.subObjs.second = {notADate: 87654, isADate: new Date()};
+        s.SO.notify();
+        //s.SO.notify(["subObjs"], true);
+    }, 3000);
+
     /**
      * Source test
      */
 
     c.Sourcetest.on('message', function (msg) {
-        console.log("Got a message:", msg);
+        //console.log("Got a message:", msg);
     });
 
     setInterval(function () {
