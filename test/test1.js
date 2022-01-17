@@ -1,3 +1,7 @@
+"use strict";
+
+var util = require("util");
+
 var service = require("../index");
 
 var RPCTestRequestSchema = {
@@ -59,6 +63,21 @@ var SharedObjectSchema = {
                         notADate: {type: "number"},
                         isADate: {type: "date"}
                     }}
+            }
+        },
+        subArr: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    thing: {type:"string"},
+                    dates: {
+                        type: "object",
+                        properties: {
+                            '*': {type: "date"}
+                        }
+                    }
+                }
             }
         }
     }
@@ -124,7 +143,17 @@ var initials = {
                 notADate: 1234,
                 isADate: new Date()
             }
-        }
+        },
+
+        subArr: [
+            {
+                thing: "initial",
+                dates: {
+                    id: new Date(),
+                    blablie: new Date(0)
+                }
+            }
+        ]
     }
 };
 
@@ -151,6 +180,21 @@ c.RPCTest.call("Hello", function (err, res) {
 
     setTimeout(() => {
         s.SO.data.subObjs.second = {notADate: 87654, isADate: new Date()};
+        s.SO.data.subArr.push({
+            thing: "secondary",
+            dates: {
+                id: new Date(),
+                blie: new Date(0)
+            }
+        });
+        s.SO.data.subArr[0].dates.blablie = new Date();
+        s.SO.notify();
+        //s.SO.notify(["subObjs"], true);
+    }, 3000);
+
+    setTimeout(() => {
+        s.SO.data.subArr = s.SO.data.subArr.slice(1);
+        s.SO.data.subArr[0].dates.blablie = new Date();
         s.SO.notify();
         //s.SO.notify(["subObjs"], true);
     }, 3000);
@@ -184,8 +228,8 @@ c.RPCTest.call("Hello", function (err, res) {
         });
 
         c.SO.on('update', (diffs) => {
-            console.log("Client object was updated:", diffs);
-            console.log(c.SO.data);
+            console.log("Client object was updated:", util.inspect(diffs, false, null, true));
+            console.log(util.inspect(c.SO.data, false, null, true));
         });
         c.SO.subscribe()
     }, 1000);
