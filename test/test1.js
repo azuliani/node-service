@@ -79,6 +79,18 @@ var SharedObjectSchema = {
                     }
                 }
             }
+        },
+        oneObj:{
+            type: "object",
+            properties: {
+                maybeADate: {type: "string"}
+            }
+        },
+        twoObj:{
+            type: "object",
+            properties: {
+                maybeADate: {type: "date"}
+            }
         }
     }
 };
@@ -145,6 +157,13 @@ var initials = {
             }
         },
 
+        oneObj: {
+            maybeADate: "Nope, a string"
+        },
+        twoObj: {
+            maybeADate: new Date()
+        },
+
         subArr: [
             {
                 thing: "initial",
@@ -196,6 +215,9 @@ c.RPCTest.call("Hello", function (err, res) {
         s.SO.data.subArr = s.SO.data.subArr.slice(1);
         s.SO.data.subArr[0].dates.blablie = new Date();
         s.SO.notify();
+
+        s.SO.data.oneObj.maybeADate = "No, this is a string";
+        s.SO.notify(["oneObj"])
         //s.SO.notify(["subObjs"], true);
     }, 3000);
 
