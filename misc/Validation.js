@@ -107,23 +107,24 @@ function parseDiffDates(endpoint, diff) {
 
     if (schema && !schema.skip && !endpoint.datePaths) {
         endpoint.datePaths = extractDatepaths(schema);
-
     }
 
     if (!endpoint.datePaths || endpoint.datePaths.length === 0) {
         return;
     }
 
-    if (!endpoint.slicedPaths) {
-        endpoint.slicedPaths = {};
-    }
+    let slicedPaths = endpoint.datePaths.filter((path) => {
+        for(let i = 0; i < diff.path.length; i++) {
+            if (!(path[i] === "*" || path[i] === diff.path[i])) {
+                return false;
+            }
+        }
+        return true;
+    }).map(x => x.slice(diff.path.length-1)).filter(x => x.length);
 
-    if ((diff.path.length || diff.path.length === 0) && !endpoint.slicedPaths[diff.path.length]) {
-        endpoint.slicedPaths[diff.path.length] = endpoint.datePaths.map(x => x.slice(diff.path.length-1)).filter(x => x.length)
-    }
 
     if (diff.rhs) {
-        for (let datePath of endpoint.slicedPaths[diff.path.length]) {
+        for (let datePath of slicedPaths) {
             if (datePath[0] === diff.path[diff.path.length-1] || datePath[0] === "*") {
                 // Kinda yuk
                 let memo = datePath[0];
@@ -140,7 +141,7 @@ function parseDiffDates(endpoint, diff) {
 
 
     if (diff.kind === "A" && diff.item) {
-        for (let datePath of endpoint.slicedPaths[diff.path.length]) {
+        for (let datePath of slicedPaths) {
             if (datePath[0] === diff.path[diff.path.length - 1] || datePath[0] === "*") {
                 // Kinda yuk
 
