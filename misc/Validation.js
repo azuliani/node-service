@@ -2,6 +2,7 @@
 
 var assert = require("assert");
 var inspector = require("schema-inspector");
+var Tinycache = require("tinycache");
 
 function RPCValidation(endpoint, inout, obj, parseDates){
     assert(parseDates === true || parseDates === false);
@@ -113,15 +114,24 @@ function parseDiffDates(endpoint, diff) {
         return;
     }
 
-    let slicedPaths = endpoint.datePaths.filter((path) => {
-        for(let i = 0; i < diff.path.length; i++) {
-            if (!(path[i] === "*" || path[i] === diff.path[i])) {
-                return false;
-            }
-        }
-        return true;
-    }).map(x => x.slice(diff.path.length-1)).filter(x => x.length);
+    if (!endpoint.slicedCache) {
+        endpoint.slicedCache = new Tinycache();
+    }
 
+    let slicedPaths = endpoint.slicedCache.get(diff.path);
+
+    if (!slicedPaths) {
+        slicedPaths = endpoint.datePaths.filter((path) => {
+            for (let i = 0; i < diff.path.length; i++) {
+                if (!(path[i] === "*" || path[i] === diff.path[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }).map(x => x.slice(diff.path.length - 1)).filter(x => x.length);
+    }
+
+    endpoint.slicedCache.put(diff.path, slicedPaths, 10000);
 
     if (diff.rhs) {
         for (let datePath of slicedPaths) {

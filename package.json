@@ -17,6 +17,7 @@
     "heapdump": "^0.3.15",
     "json.date-extensions": "^1.2.2",
     "schema-inspector": "^1.5.7",
+    "tinycache": "^1.1.2",
     "zeromq": "^5.2.8"
   }
 }
