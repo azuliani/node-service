@@ -53,14 +53,11 @@ class SharedObjectClient extends EventEmitter {
             this.timeBuffer[idx] = new Date(data.message.now);
 
             this.outstandingDiffs++;
-            if (this.ready) {
-                this._tryApply();
-            }
+            setImmediate(this._tryApply.bind(this));
         }
     }
 
     _tryApply() {
-        assert(this.ready)
         var totalDiffs = [];
         let now = new Date();
 
