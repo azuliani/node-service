@@ -49,7 +49,12 @@ var initials = {
         now: new Date()
     }
 };
-
+/*
+initials.SO.largething = {};
+for(let i = 0; i < 10000; i++) {
+    initials.SO.largething[Math.floor(Math.random()*100000000).toString()] = Math.floor(Math.random()*100000000).toString();
+}
+*/
 var s = new service.Service(descriptor, {}, initials);
 
 /**
@@ -57,16 +62,32 @@ var s = new service.Service(descriptor, {}, initials);
  */
 
 function thing() {
-    s.SO.data.rand = Math.random();
+
     s.SO.data.now = new Date();
-    s.SO.data.message = "Last thing you said was " + lastMSG;
-    s.SO.notify();
+    s.SO.notify(['now']);
+    s.SO.data.rand = s.SO._v;//Math.random();
+    s.SO.notify(['rand']);
+    //s.SO.data.message = "Last thing you said was " + lastMSG;
     setImmediate(thing);
 }
 
 setTimeout(() => {
     console.log("Starting the thing now.");
     thing();
-},20000);
+},1000);
+
+function longthing(){
+    console.log("Doing longthing");
+    var a = 0;
+    let limit = 100000000+Math.random()*1000000000
+    for(var i = 0; i<limit; i++){
+        a++;
+    }
+    console.log("Done longthing " + a);
+}
+
+setInterval(longthing, 5000);
+setInterval(longthing, 3000);
+setInterval(longthing, 2000);
 
 

@@ -57,7 +57,7 @@ var c = new service.Client(descriptor);
  */
 
 c.SO.on('init',()=>{
-    console.log("Client object was initialised:",c.SO.data);
+    console.log("Client object was initialised:"/*,c.SO.data*/);
 });
 
 c.SO.on('update',(oldVal, newVal, diffs) => {
@@ -69,18 +69,23 @@ c.SO.on('update',(oldVal, newVal, diffs) => {
 });
 
 c.SO.subscribe()
-
+/*
 setInterval(() => {
     console.log("DATA",new Date(), c.SO.data);
 }, 5000);
+*/
 
-/*
-setInterval(function(){
+function longthing(){
     console.log("Doing longthing");
     var a = 0;
-    for(var i = 0; i<1000000000; i++){
+    let limit = 100000000+Math.random()*1000000000
+    for(var i = 0; i<limit; i++){
         a++;
     }
     console.log("Done longthing " + a);
-},5000);
-*/
+}
+
+setInterval(longthing, 5000);
+setInterval(longthing, 3000);
+setInterval(longthing, 2000);
+

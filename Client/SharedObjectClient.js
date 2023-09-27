@@ -1,5 +1,6 @@
 "use strict";
 
+var assert = require("assert");
 var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
@@ -42,18 +43,24 @@ class SharedObjectClient extends EventEmitter {
             });
 
             var idx = data.message.v - (this._v + 1);
+
             if (this.ready && idx < 0) {
                 console.error("(" + this.endpoint.name + ") Bad version! Reinit!");
                 return this._init();
             }
+
             this.procBuffer[idx] = data.message.diffs;
             this.timeBuffer[idx] = new Date(data.message.now);
+
             this.outstandingDiffs++;
-            setImmediate(this._tryApply.bind(this));
+            if (this.ready) {
+                setImmediate(this._tryApply.bind(this));
+            }
         }
     }
 
     _tryApply() {
+        assert(this.ready)
         var totalDiffs = [];
         let now = new Date();
 
@@ -62,7 +69,7 @@ class SharedObjectClient extends EventEmitter {
             // Diffs are already reversed by Server!
             let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
-            totalDiffs = [...totalDiffs, ...diffs];
+            totalDiffs.push(...diffs);
 
             for(let diff of diffs) {
                 parseDiffDates(this.endpoint, diff);
@@ -76,8 +83,9 @@ class SharedObjectClient extends EventEmitter {
             i++;
         }
 
-        this.procBuffer.splice(0, i);
-        this.timeBuffer.splice(0, i);
+
+        this.procBuffer = this.procBuffer.slice(i)
+        this.timeBuffer = this.timeBuffer.slice(i)
 
         if (totalDiffs.length > 0) {
             this.emit('update', totalDiffs);
@@ -143,15 +151,18 @@ class SharedObjectClient extends EventEmitter {
 
                 console.error("(" + self.endpoint.name + ") Init installed version", self._v);
 
-                self.procBuffer.splice(0, self._v);
-                self.timeBuffer.splice(0, self._v);
+                self.procBuffer = self.procBuffer.slice(self._v);
+                self.timeBuffer = self.timeBuffer.slice(self._v);
+
                 self.outstandingDiffs = 0;
                 for (let i of self.procBuffer) {
                     if (!!i)
                         self.outstandingDiffs++;
                 }
+
                 self.ready = true;
                 self._tryApply();
+
                 self.emit('init', {v: answer.res.v, data: answer.res.data});
             });
         });

@@ -49,6 +49,7 @@ class Client {
 
     _setupSource(hostname){
         var msock = new MonitoredSocket('sub');
+        msock.sock.setsockopt(24, 50000) // Increase ZMQ_RCVHWM so there's enough blocking time
         this.transports.source = msock.sock;
         this.transports.source.connect(hostname);
         this._sourceHostname = hostname;
