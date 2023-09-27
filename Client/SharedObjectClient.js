@@ -54,7 +54,7 @@ class SharedObjectClient extends EventEmitter {
 
             this.outstandingDiffs++;
             if (this.ready) {
-                setImmediate(this._tryApply.bind(this));
+                this._tryApply();
             }
         }
     }
