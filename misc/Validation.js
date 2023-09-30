@@ -1,174 +1,275 @@
 "use strict";
-var HEARTBEAT_SECONDS = 10;
 
-var zmq = require("zeromq");
-var MonitoredSocket = require("./MonitoredSocket");
+var assert = require("assert");
+var inspector = require("schema-inspector");
+var Tinycache = require("tinycache");
 
-var RPCClient = require("./RPCClient");
-var SourceClient = require("./SourceClient");
-var SharedObjectClient = require("./SharedObjectClient");
-var PullClient = require("./PullClient");
-var SinkClient = require("./SinkClient");
+function RPCValidation(endpoint, inout, obj, parseDates){
+    assert(parseDates === true || parseDates === false);
+    let schema;
+    let datePaths;
 
-class Client {
-    constructor(descriptor, workers){
-        if (!workers){
-            workers = {}
+    if (inout === "input") {
+        schema = endpoint.requestSchema;
+        if (!endpoint.inDatePaths) {
+            endpoint.inDatePaths = extractDatepaths(schema);
         }
+        datePaths = endpoint.inDatePaths;
 
-        this.workers = workers;
-        this.descriptor = descriptor;
-        this.transports = {};
-
-        this.sourceDisconnections = {};
-
-        this._setupTransports();
-        this._setupEndpoints();
+    } else if (inout === "output") {
+        schema = endpoint.replySchema;
+        if (!endpoint.outDatePaths) {
+            endpoint.outDatePaths = extractDatepaths(schema);
+        }
+        datePaths = endpoint.outDatePaths;
+    } else {
+        throw new Error("doValidation called with wrong argument");
     }
 
-    _setupTransports(){
-        for(let transport in this.descriptor.transports){
-            switch (transport){
-                case 'source':
-                    this._setupSource(this.descriptor.transports.source.client);
-                    break;
-                case 'sink':
-                    this._setupSink(this.descriptor.transports.sink.client);
-                    break;
-                case 'rpc':
-                    this._setupRpc(this.descriptor.transports.rpc.client);
-                    break;
-                case 'pushpull':
-                    this._setupPull();
-                    break;
-                default:
-                    break;
-            }
+    if (parseDates && datePaths.length) {
+        for(let path of datePaths) {
+            applyDatepath(path, obj);
         }
     }
 
-    _setupSource(hostname){
-        var msock = new MonitoredSocket('sub');
-        this.transports.source = msock.sock;
-        this.transports.source.connect(hostname);
-        this._sourceHostname = hostname;
-        // this._setupHeartbeat();
-        this.transports.source.on('message', this._sourceCallback.bind(this));
-        msock.on('disconnected', this._sourceClosed.bind(this));
-        msock.on('connected', this._sourceConnected.bind(this));
-    }
-
-    _setupHeartbeat(){
-        this['_heartbeat'] = {
-            _processMessage: this._resetHeartbeatTimeout.bind(this)
-        }
-        this.transports.source.subscribe('_heartbeat');
-    }
-
-    _setupSink(hostname){
-        var sock = new zmq.socket('push');
-        this.transports.sink = sock;
-        sock.connect(hostname);
-    }
-
-    _sourceCallback(endpoint, message){
-        var data = JSON.parse(message);
-        this[endpoint]._processMessage(data);
-    }
-
-    _sourceConnected(){
-        // this._heartbeatTimeout = setTimeout(this._heartbeatFailed.bind(this), HEARTBEAT_SECONDS * 1000);
-        // Loop endpoints
-        for(let endpoint of this.descriptor.endpoints) {
-            if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
-                console.error(endpoint.name, 'connected');
-                this[endpoint.name].emit('connected');
-                if (endpoint.type === 'SharedObject' && this.sourceDisconnections[endpoint.name]) {
-                    this[endpoint.name]._init();
-                    delete this.sourceDisconnections[endpoint.name];
-                }
-            }
-        }
-    }
-
-    _sourceClosed(){
-        clearTimeout(this._heartbeatTimeout);
-        // Loop endpoints
-        for(let endpoint of this.descriptor.endpoints) {
-            if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
-                console.error(endpoint.name, 'disconnected');
-                this[endpoint.name].emit('disconnected');
-                if (endpoint.type === 'SharedObject') {
-                    this[endpoint.name]._flushData();
-                    this.sourceDisconnections[endpoint.name] = true;
-                }
-            }
-        }
-    }
-
-    _resetHeartbeatTimeout(){
-        clearTimeout(this._heartbeatTimeout);
-        this._heartbeatTimeout = setTimeout(this._heartbeatFailed.bind(this), HEARTBEAT_SECONDS * 1000);
-    }
-
-    _heartbeatFailed(){
-        console.error('Heartbeat failed source transport -> Closing connection', this._sourceHostname, this.descriptor.endpoints.map((item)=>{return item.name}).join(','));
-        this.transports.source.disconnect(this._sourceHostname)
-        this._sourceClosed();
-        this.transports.source.connect(this._sourceHostname)
-    }
-
-    _setupRpc(origHostname) {
-        var hostnameAndPort = origHostname.split(":");
-        var hostname = hostnameAndPort[1].substr(2);
-        var port = hostnameAndPort[2];
-        this.transports.rpc = {hostname, port};
-    }
-
-    _setupPull(hostname){
-        var sock = new zmq.socket("pull");
-        // DON'T CONNECT! Client must explicitly ask!
-        sock.on('message', this._pullCallback.bind(this));
-        this.transports.pushpull = sock;
-    }
-
-    _pullCallback(message){
-        if (!this.PullEndpoint){
-            throw new Error("Got a pull message, but ot Pull enpoint is connected!");
-        }
-
-        this.PullEndpoint._processMessage(JSON.parse(message));
-    }
-
-    _setupEndpoints(){
-        for(let endpoint of this.descriptor.endpoints){
-            switch(endpoint.type){
-                case 'RPC':
-                    this[endpoint.name] = new RPCClient(endpoint, this.transports);
-                    break;
-                case 'Source':
-                    this[endpoint.name] = new SourceClient(endpoint, this.transports);
-                    break;
-                case 'SharedObject':
-                    this[endpoint.name] = new SharedObjectClient(endpoint, this.transports);
-                    this['_SO_'+endpoint.name] = this[endpoint.name];
-                    break;
-                case 'PushPull':
-                    if (this.PullEndpoint){
-                        throw new Error("Only a singly Pushpull endpoint can be constructed per service!");
-                    }
-                    this[endpoint.name] = new PullClient(endpoint, this.transports, this.descriptor.transports.pushpull.client);
-                    this.PullEndpoint = this[endpoint.name];
-                    break;
-                case 'Sink':
-                    this[endpoint.name] = new SinkClient(endpoint, this.transports, this.descriptor.transports.sink.client);
-                    this.SinkEndpoint = this[endpoint.name];
-                    break;
-                default:
-                    throw "Unknown endpoint type.";
-            }
+    if (!schema){
+        console.error("There's no schema for RPC Call " + endpoint.name + ". Fix this!");
+    } else {
+        var validation = inspector.validate(schema, obj);
+        if (!validation.valid){
+            throw new Error("Validation failed! " + validation.format());
         }
     }
 }
 
-module.exports = Client;
+function SourceSinkValidation(endpoint, obj, parseDates){
+    assert(parseDates === true || parseDates === false);
+
+    var schema = endpoint.messageSchema;
+
+    if(schema.skip){
+        return
+    }
+
+    if (schema && !endpoint.datePaths) {
+        endpoint.datePaths = extractDatepaths(schema);
+    }
+
+    if (!schema){
+        console.error("There's no schema for Source/Sink " + endpoint.name + ". Fix this!");
+    }
+
+    if (parseDates && endpoint.datePaths && endpoint.datePaths.length) {
+        for(let path of endpoint.datePaths) {
+            applyDatepath(path, obj);
+        }
+    }
+
+    var validation = inspector.validate(schema, obj);
+
+    if (!validation.valid){
+        throw new Error("Validation failed! " + validation.format());
+    }
+}
+
+function SharedObjectValidation(endpoint, obj, hint){
+
+    if (!endpoint.objectSchema){
+        console.error("There's no schema for SharedObject " + endpoint.name + ". Fix this!");
+    }
+
+    if (!hint) {
+        hint = [];
+    }
+
+    // Check if we need to run validation
+    if(endpoint.objectSchema.skip){
+        return
+    }
+
+    var subs = _getSubsForHint(endpoint.objectSchema, obj, hint);
+
+    var schema = subs.schema;
+    obj = subs.obj;
+
+    var validation = inspector.validate(schema, obj);
+
+    if (!validation.valid) {
+        throw new Error("Validation failed! " + validation.format());
+    }
+}
+
+function parseDiffDates(endpoint, diff) {
+    var schema = endpoint.objectSchema;
+
+    if (schema.skip) {
+        return;
+    }
+
+    if (schema && !schema.skip && !endpoint.datePaths) {
+        endpoint.datePaths = extractDatepaths(schema);
+    }
+
+    if (!endpoint.datePaths || endpoint.datePaths.length === 0) {
+        return;
+    }
+
+    if (!endpoint.slicedCache) {
+        endpoint.slicedCache = new Tinycache();
+    }
+
+    let slicedPaths = endpoint.slicedCache.get(diff.path);
+
+    if (!slicedPaths) {
+        slicedPaths = endpoint.datePaths.filter((path) => {
+            for (let i = 0; i < diff.path.length; i++) {
+                if (!(path[i] === "*" || path[i] === diff.path[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }).map(x => x.slice(diff.path.length - 1)).filter(x => x.length);
+    }
+
+    endpoint.slicedCache.put(diff.path, slicedPaths, 10000);
+
+    if (diff.rhs) {
+        for (let datePath of slicedPaths) {
+            if (datePath[0] === diff.path[diff.path.length-1] || datePath[0] === "*") {
+                // Kinda yuk
+                let memo = datePath[0];
+
+                datePath[0] = "rhs";
+                applyDatepath(datePath, diff);
+                datePath[0] = "lhs";
+                applyDatepath(datePath, diff);
+
+                datePath[0] = memo;
+            }
+        }
+    }
+
+
+    if (diff.kind === "A" && diff.item) {
+        for (let datePath of slicedPaths) {
+            if (datePath[0] === diff.path[diff.path.length - 1] || datePath[0] === "*") {
+                // Kinda yuk
+
+                let slicedPath = datePath.slice(1);
+                slicedPath[0] = "rhs";
+                applyDatepath(slicedPath, diff.item);
+            }
+        }
+    }
+
+
+}
+
+function parseFullDates(endpoint, obj) {
+    assert(endpoint.objectSchema);
+
+    var schema = endpoint.objectSchema;
+
+    if(schema.skip){
+        return
+    }
+
+    if (schema && !endpoint.datePaths) {
+        endpoint.datePaths = extractDatepaths(schema);
+    }
+
+    if (endpoint.datePaths && endpoint.datePaths.length) {
+        for(let path of endpoint.datePaths) {
+            applyDatepath(path, obj);
+        }
+    }
+
+    var validation = inspector.validate(schema, obj);
+
+    if (!validation.valid){
+        throw new Error("Validation failed! " + validation.format());
+    }
+}
+
+function _getSubsForHint(schema, obj, hint){
+    var i = 0;
+    while(i < hint.length){
+        if (!(hint[i] in obj)) {
+            break; // On delete, validate entire parent. Otherwise possible missing items may not be caught.
+        }
+
+        obj = obj[hint[i]];
+
+        if (schema.type === 'object') {
+            if (hint[i] in schema.properties) {
+                schema = schema.properties[hint[i]];
+            } else if ('*' in schema.properties) {
+                schema = schema.properties['*'];
+            } else{
+                throw new Error("Unknown property, and no catch all!")
+            }
+        } else if (schema.type === 'array') {
+            schema = schema.items;
+        } else {
+            // Hinting on anything else is not currently supported, crash on possible weirdness.
+            throw new Error("Please only do hinting on objects/arrays.");
+        }
+
+        i++;
+    }
+
+    return {schema, obj};
+}
+
+module.exports = {
+    RPCValidation,
+    SharedObjectValidation,
+    parseDiffDates,
+    parseFullDates,
+    SourceValidation: SourceSinkValidation,
+    SinkValidation: SourceSinkValidation
+};
+
+function extractDatepaths(schema) {
+    let out = [];
+    if (schema && schema.type === "object" && schema.properties) {
+        for (let prop in schema.properties) {
+            if (schema.properties[prop].type === "object") {
+                let recurse = extractDatepaths(schema.properties[prop]);
+                out = [...out, ...recurse.map(x => [prop, ...x])];
+            } else if (schema.properties[prop].type === "array") {
+                let recurse = extractDatepaths(schema.properties[prop].items);
+                out = [...out, ...recurse.map(x=>[prop,"*",...x])];
+            } else if (schema.properties[prop].type === "date") {
+                out.push([prop]);
+            }
+        }
+    }
+
+    return out;
+}
+
+function applyDatepath(path, obj) {
+    if (!obj[path[0]] && !(path[0] === "*" && typeof obj === "object")) {
+        return;
+    }
+
+    if (path.length === 1) {
+        if (path[0] !== "*") {
+            obj[path[0]] = new Date(obj[path[0]])
+        } else {
+            for(let key in obj) {
+                obj[key] = new Date(obj[key]);
+            }
+        }
+    } else {
+        let nextPath = path.slice(1);
+        if (path[0] !== "*") {
+            applyDatepath(nextPath, obj[path[0]]);
+        } else {
+            for(let key in obj) {
+                applyDatepath(nextPath, obj[key]);
+            }
+        }
+    }
+}
