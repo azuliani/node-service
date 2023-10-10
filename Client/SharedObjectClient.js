@@ -1,5 +1,6 @@
 "use strict";
 
+var assert = require("assert");
 var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 var differ = require("deep-diff");
@@ -46,10 +47,15 @@ class SharedObjectClient extends EventEmitter {
                 console.error("(" + this.endpoint.name + ") Bad version! Reinit!");
                 return this._init();
             }
-            this.procBuffer[idx] = data.message.diffs;
-            this.timeBuffer[idx] = new Date(data.message.now);
-            this.outstandingDiffs++;
-            setImmediate(this._tryApply.bind(this));
+
+            if (this.outstandingDiffs === 0 && idx === 0) {
+                this._instantApply(data.message.diffs, data.message.now);
+            } else {
+                this.procBuffer[idx] = data.message.diffs;
+                this.timeBuffer[idx] = new Date(data.message.now);
+                this.outstandingDiffs++;
+                setImmediate(this._tryApply.bind(this));
+            }
         }
     }
 
@@ -81,6 +87,35 @@ class SharedObjectClient extends EventEmitter {
 
         if (totalDiffs.length > 0) {
             this.emit('update', totalDiffs);
+
+            if (this.timeCount > REPORTEVERY) {
+                console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
+                this.emit('timing', this.timeSum / this.timeCount);
+                this.timeSum = 0;
+                this.timeCount = 0;
+            }
+
+        } else if (this.ready && this.outstandingDiffs > 10) {
+            console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
+            this._init();
+        }
+    }
+
+    _instantApply(diffs, time) {
+        let now = new Date();
+
+        for(let diff of diffs) {
+            parseDiffDates(this.endpoint, diff);
+            differ.applyChange(this.data, true, diff);
+        }
+
+        this.timeSum += now - new Date(time);
+        this.timeCount++;
+
+        this._v++;
+
+        if (diffs.length > 0) {
+            this.emit('update', diffs);
 
             if (this.timeCount > REPORTEVERY) {
                 console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
