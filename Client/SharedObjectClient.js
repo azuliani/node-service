@@ -48,7 +48,7 @@ class SharedObjectClient extends EventEmitter {
                 return this._init();
             }
 
-            if (this.outstandingDiffs === 0 && idx === 0) {
+            if (false && this.outstandingDiffs === 0 && idx === 0) { // Disabled with false
                 this._instantApply(data.message.diffs, data.message.now);
             } else {
                 this.procBuffer[idx] = data.message.diffs;
