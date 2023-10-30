@@ -68,7 +68,7 @@ class SharedObjectClient extends EventEmitter {
             // Diffs are already reversed by Server!
             let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
-            totalDiffs.push(...diffs);
+            safePush(totalDiffs, diffs)
 
             for(let diff of diffs) {
                 parseDiffDates(this.endpoint, diff);
@@ -198,6 +198,13 @@ class SharedObjectClient extends EventEmitter {
         });
         req.write(postData);
         req.end();
+    }
+}
+
+function safePush(to, push) {
+    let startIndex = to.length;
+    for(let i = 0; i<push.length; i++) {
+        to[startIndex+i] = push[i];
     }
 }
 
