@@ -68,7 +68,7 @@ class SharedObjectClient extends EventEmitter {
             // Diffs are already reversed by Server!
             let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
-            totalDiffs = [...totalDiffs, ...diffs];
+            totalDiffs.push(...diffs);
 
             for(let diff of diffs) {
                 parseDiffDates(this.endpoint, diff);
