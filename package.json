@@ -14,9 +14,9 @@
   "dependencies": {
     "deep-diff": "^0.3.3",
     "fast-copy": "^2.1.1",
-    "heapdump": "^0.3.15",
     "json.date-extensions": "^1.2.2",
     "schema-inspector": "^1.5.7",
+    "sializer": "^0.3.0",
     "tinycache": "^1.1.2",
     "zeromq": "^5.2.8"
   }
