@@ -1,4 +1,4 @@
-var service = require("../index");
+var service = require("../../index");
 
 var SharedObjectSchema = {
     type: 'object',
@@ -19,29 +19,29 @@ var SharedObjectSchema = {
 var descriptor = {
     transports: {
         source: {
-            client: "tcp://127.0.0.1:14001",
-            server: "tcp://127.0.0.1:14001"
+            client: "ipc://pubsub.ipc",
+            server: "ipc://pubsub.ipc"
         },
         sink: {
-            client: "tcp://127.0.0.1:14002",
-            server: "tcp://127.0.0.1:14002"
+            client: "ipc://pushpull.ipc",
+            server: "ipc://pushpull.ipc"
         },
         rpc: {
             client: "tcp://127.0.0.1:14003",
             server: "tcp://127.0.0.1:14003"
         }
     },
+
     endpoints: [
         {
             name: "SO",
             type: "SharedObject",
-            objectSchema: SharedObjectSchema
+            objectSchema: {skip: true}
         }
     ]
 };
 
 var lastMSG = "*NOTHING*";
-
 var initials = {
     SO: {
         message: "Last thing you said was *NOTHING*",
@@ -49,25 +49,28 @@ var initials = {
         now: new Date()
     }
 };
-/*
-initials.SO.largething = {};
-for(let i = 0; i < 10000; i++) {
-    initials.SO.largething[Math.floor(Math.random()*100000000).toString()] = Math.floor(Math.random()*100000000).toString();
-}
-*/
-var s = new service.Service(descriptor, {}, initials);
 
-/**
- * SharedObject test
- */
+var s = new service.Service(descriptor, {}, initials);
+var c = new service.Client(descriptor);
+c.SO.subscribe();
+
+var clientUpdates = 0;
+c.SO.on('update', (diffs)=> {
+    clientUpdates+=diffs.length;
+});
+
+var serviceNotifies = 0;
+setInterval(() => {
+    console.log(clientUpdates, '/', serviceNotifies, "Client / Service");
+    serviceNotifies=0;
+    clientUpdates = 0;
+},1000)
 
 function thing() {
-
     s.SO.data.now = new Date();
-    s.SO.notify(['now']);
-    s.SO.data.rand = s.SO._v;//Math.random();
-    s.SO.notify(['rand']);
-    //s.SO.data.message = "Last thing you said was " + lastMSG;
+    s.SO.data.rand = Math.random();
+    s.SO.notify();
+    serviceNotifies++;
     setImmediate(thing);
 }
 
@@ -85,9 +88,5 @@ function longthing(){
     }
     console.log("Done longthing " + a);
 }
-
-setInterval(longthing, 5000);
-setInterval(longthing, 3000);
-setInterval(longthing, 2000);
 
 

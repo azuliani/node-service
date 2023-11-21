@@ -1,4 +1,4 @@
-var service = require("../index");
+var service = require("../../index");
 
 var SharedObjectSchema = {
     type: 'object',
@@ -31,17 +31,17 @@ var descriptor = {
             server: "tcp://127.0.0.1:14003"
         }
     },
+
     endpoints: [
         {
             name: "SO",
             type: "SharedObject",
-            objectSchema: SharedObjectSchema
+            objectSchema: {skip: true}
         }
     ]
 };
 
 var lastMSG = "*NOTHING*";
-
 var initials = {
     SO: {
         message: "Last thing you said was *NOTHING*",
@@ -50,30 +50,28 @@ var initials = {
     }
 };
 
-var c = new service.Client(descriptor);
+var s = new service.Service(descriptor, {}, initials);
 
-/**
- * SharedObject test
- */
-
-c.SO.on('init',()=>{
-    console.log("Client object was initialised:"/*,c.SO.data*/);
-});
-
-c.SO.on('update',(oldVal, newVal, diffs) => {
-    //console.log("Client object was updated:", c.SO.data);
-    var a = 0;
-    //for(var i = 0; i<50000000; i++){
-    //    //a++;
-    //}
-});
-
-c.SO.subscribe()
-/*
+var serviceNotifies = 0;
 setInterval(() => {
-    console.log("DATA",new Date(), c.SO.data);
-}, 5000);
-*/
+    console.log(serviceNotifies, "service notifies");
+    serviceNotifies=0;
+},1000)
+
+function thing() {
+    for(let i = 0; i < 10000; i++) {
+        s.SO.data.now = new Date();
+        s.SO.data.rand = Math.random();
+        s.SO.notify();
+        serviceNotifies++;
+    }
+    setImmediate(thing);
+}
+
+setTimeout(() => {
+    console.log("Starting the thing now.");
+    thing();
+},1000);
 
 function longthing(){
     console.log("Doing longthing");
@@ -85,7 +83,4 @@ function longthing(){
     console.log("Done longthing " + a);
 }
 
-setInterval(longthing, 5000);
-setInterval(longthing, 3000);
-setInterval(longthing, 2000);
 
