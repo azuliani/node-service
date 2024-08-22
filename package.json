@@ -3,21 +3,14 @@
   "version": "0.1.0",
   "description": "Todo",
   "main": "index.js",
-  "directories": {
-    "test": "test"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "author": "Alexander Zuliani",
   "license": "MIT",
   "dependencies": {
-    "deep-diff": "^0.3.3",
-    "fast-copy": "^2.1.1",
+    "deep-diff": "^1.0.2",
+    "fast-copy": "^3.0.2",
     "json.date-extensions": "^1.2.2",
-    "schema-inspector": "^1.5.7",
-    "sializer": "^0.3.0",
+    "schema-inspector": "^2.1.0",
     "tinycache": "^1.1.2",
-    "zeromq": "^5.2.8"
+    "zeromq": "^5.3.1"
   }
 }

@@ -1,7 +1,7 @@
 "use strict";
 
 var assert = require("assert");
-var fastcopy = require("fast-copy");
+var fastcopy = require("fast-copy").default;
 var doValidate = require("../misc/Validation").SharedObjectValidation;
 var differ = require("deep-diff");
 
