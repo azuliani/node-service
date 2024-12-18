@@ -1,6 +1,6 @@
 "use strict";
 
-var zmq = require("zeromq");
+var zmq = require("zeromq/v5-compat");
 var http = require("http");
 var EventEmitter = require("events").EventEmitter;
 
@@ -64,7 +64,7 @@ class Service {
         var sock = new zmq.socket('pull');
         this.transports.sink = sock;
 
-        sock.bindSync(hostname);
+        sock.bind(hostname);
         sock.on('message', this._sinkCallback.bind(this));
     }
 
@@ -116,7 +116,7 @@ class Service {
 
     _setupPushPull(hostname) {
         var sock = new zmq.socket('push');
-        sock.bindSync(hostname);
+        sock.bind(hostname);
         this.transports.pushpull = sock;
     }
 

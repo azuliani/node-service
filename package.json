@@ -11,6 +11,6 @@
     "json.date-extensions": "^1.2.2",
     "schema-inspector": "^2.1.0",
     "tinycache": "^1.1.2",
-    "zeromq": "^5.3.1"
+    "zeromq": "^6.1.2"
   }
 }

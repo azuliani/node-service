@@ -11,7 +11,7 @@ class SinkClient {
     }
 
     push(message){
-        doValidation(this.endpoint, message);
+        doValidation(this.endpoint, message, false);
 
         var OTW = message;
         this.transport.send(JSON.stringify(OTW));
