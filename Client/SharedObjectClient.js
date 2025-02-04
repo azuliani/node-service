@@ -8,6 +8,7 @@ var parseDiffDates = require("../misc/Validation").parseDiffDates;
 var parseFullDates = require("../misc/Validation").parseFullDates;
 
 const REPORTEVERY = 2000;
+const OUTSTANDINGDIFFSTIMEOUT = 10000;
 
 class SharedObjectClient extends EventEmitter {
     constructor(endpoint, transports) {
@@ -18,44 +19,39 @@ class SharedObjectClient extends EventEmitter {
         this.endpoint = endpoint;
         this.initTransport = transports.rpc;
         this.updateTransport = transports.source;
-        this.subscribed = false;
 
         this._flushData();
     }
 
     subscribe() {
         this.updateTransport.subscribe("_SO_" + this.endpoint.name);
-        this.subscribed = true;
         this._init();
     }
 
     unsubscribe() {
         this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
-        this.subscribed = false;
     }
 
     _processMessage(data) {
         if (data.endpoint === "_SO_" + this.endpoint.name) {
 
-            this.emit('raw', {
-                v: data.message.v,
-                diffs: data.message.diffs
-            });
-
             var idx = data.message.v - (this._v + 1);
-            if (this.ready && idx < 0) {
-                console.error("(" + this.endpoint.name + ") Bad version! Reinit!");
-                return this._init();
+
+            if (idx < 0) {
+                if (this.ready) {
+                    console.error(new Date(), "(" + this.endpoint.name + ") Old version! Reinit!");
+                    return this._reInit();
+                }
+
+                return// console.error("Received older version but only recently inited.");
             }
 
-            if (false && this.outstandingDiffs === 0 && idx === 0) { // Disabled with false
-                this._instantApply(data.message.diffs, data.message.now);
-            } else {
-                this.procBuffer[idx] = data.message.diffs;
-                this.timeBuffer[idx] = new Date(data.message.now);
-                this.outstandingDiffs++;
-                setImmediate(this._tryApply.bind(this));
-            }
+            this.procBuffer[idx] = data.message.diffs;
+            this.timeBuffer[idx] = new Date(data.message.now);
+
+            this.outstandingDiffs++;
+
+            setImmediate(() => { this._tryApply() });
         }
     }
 
@@ -86,6 +82,8 @@ class SharedObjectClient extends EventEmitter {
         this.timeBuffer.splice(0, i);
 
         if (totalDiffs.length > 0) {
+
+            //setImmediate(() => { this.emit('update', totalDiffs); });
             this.emit('update', totalDiffs);
 
             if (this.timeCount > REPORTEVERY) {
@@ -95,38 +93,19 @@ class SharedObjectClient extends EventEmitter {
                 this.timeCount = 0;
             }
 
-        } else if (this.ready && this.outstandingDiffs > 10) {
-            console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
-            this._init();
-        }
-    }
-
-    _instantApply(diffs, time) {
-        let now = new Date();
-
-        for(let diff of diffs) {
-            parseDiffDates(this.endpoint, diff);
-            differ.applyChange(this.data, true, diff);
-        }
-
-        this.timeSum += now - new Date(time);
-        this.timeCount++;
-
-        this._v++;
-
-        if (diffs.length > 0) {
-            this.emit('update', diffs);
-
-            if (this.timeCount > REPORTEVERY) {
-                console.error("(" + this.endpoint.name + ") Average time: " + (this.timeSum / this.timeCount) + " ms");
-                this.emit('timing', this.timeSum / this.timeCount);
-                this.timeSum = 0;
-                this.timeCount = 0;
+            if (this.outstandingDiffsTimeout) {
+                console.error(new Date(), "(" + this.endpoint.name + ") Managed to process messages. Clearing the outstanding diffs timer.");
+                clearTimeout(this.outstandingDiffsTimeout);
             }
 
         } else if (this.ready && this.outstandingDiffs > 10) {
-            console.error("(" + this.endpoint.name + ") Too many outstanding diffs, missed a version. Reinit.");
-            this._init();
+            if (!this.outstandingDiffsTimeout) {
+                console.error(new Date(), "(" + this.endpoint.name + ") Too many outstanding diffs. Starting the re-init timer.");
+                this.outstandingDiffsTimeout = setTimeout( () => {
+                    console.error(new Date(), "(" + this.endpoint.name + ") Actually calling init now afer outstanding diffs.");
+                    this._init();
+                }, OUTSTANDINGDIFFSTIMEOUT);
+            }
         }
     }
 
@@ -142,6 +121,12 @@ class SharedObjectClient extends EventEmitter {
         this.outstandingDiffs = 0;
 
         this.ready = false;
+    }
+
+    _reInit() {
+        this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
+        this.updateTransport.subscribe("_SO_" + this.endpoint.name);
+        this._init();
     }
 
     _init() {
@@ -176,7 +161,7 @@ class SharedObjectClient extends EventEmitter {
                 self.data = answer.res.data;
                 self._v = answer.res.v;
 
-                console.error("(" + self.endpoint.name + ") Init installed version", self._v);
+                console.error(new Date(), "(" + self.endpoint.name + ") Init installed version", self._v);
 
                 self.procBuffer.splice(0, self._v);
                 self.timeBuffer.splice(0, self._v);
@@ -185,7 +170,9 @@ class SharedObjectClient extends EventEmitter {
                     if (!!i)
                         self.outstandingDiffs++;
                 }
-                self.ready = true;
+
+                setTimeout(() => { self.ready = true; }, 30000);
+
                 self._tryApply();
                 self.emit('init', {v: answer.res.v, data: answer.res.data});
             });
@@ -194,7 +181,7 @@ class SharedObjectClient extends EventEmitter {
         var self = this;
         req.on('error', (e) => {
             console.error(`problem with request: ${e.message}`);
-            setTimeout(self._init.bind(self), 1000); // Retry after a second
+            setTimeout(self._reInit.bind(self), 1000); // Retry after a second
         });
         req.write(postData);
         req.end();

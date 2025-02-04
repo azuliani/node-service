@@ -50,6 +50,7 @@ class Client {
     _setupSource(hostname){
         var msock = new MonitoredSocket('sub');
         this.transports.source = msock.sock;
+
         this.transports.source.connect(hostname);
         this._sourceHostname = hostname;
         // this._setupHeartbeat();

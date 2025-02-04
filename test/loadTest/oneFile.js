@@ -19,12 +19,12 @@ var SharedObjectSchema = {
 var descriptor = {
     transports: {
         source: {
-            client: "ipc://pubsub.ipc",
-            server: "ipc://pubsub.ipc"
+            client: "tcp://127.0.0.1:14001",
+            server: "tcp://127.0.0.1:14001"
         },
         sink: {
-            client: "ipc://pushpull.ipc",
-            server: "ipc://pushpull.ipc"
+            client: "tcp://127.0.0.1:14002",
+            server: "tcp://127.0.0.1:14002"
         },
         rpc: {
             client: "tcp://127.0.0.1:14003",
