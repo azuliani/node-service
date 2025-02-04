@@ -8,7 +8,7 @@ var parseDiffDates = require("../misc/Validation").parseDiffDates;
 var parseFullDates = require("../misc/Validation").parseFullDates;
 
 const REPORTEVERY = 2000;
-const OUTSTANDINGDIFFSTIMEOUT = 10000;
+const OUTSTANDINGDIFFSTIMEOUT = 2000;
 
 class SharedObjectClient extends EventEmitter {
     constructor(endpoint, transports) {
@@ -25,7 +25,7 @@ class SharedObjectClient extends EventEmitter {
 
     subscribe() {
         this.updateTransport.subscribe("_SO_" + this.endpoint.name);
-        this._init();
+        setTimeout(() => { this._init() }, 1000);
     }
 
     unsubscribe() {
@@ -37,13 +37,17 @@ class SharedObjectClient extends EventEmitter {
 
             var idx = data.message.v - (this._v + 1);
 
+            if (Math.random() < 0.001) {
+                //console.log("idx",idx)
+            }
+
             if (idx < 0) {
                 if (this.ready) {
                     console.error(new Date(), "(" + this.endpoint.name + ") Old version! Reinit!");
-                    return this._reInit();
+                    return this._init();
                 }
 
-                return// console.error("Received older version but only recently inited.");
+                return // console.error("Received older version but only recently inited.");
             }
 
             this.procBuffer[idx] = data.message.diffs;
@@ -61,6 +65,12 @@ class SharedObjectClient extends EventEmitter {
 
         let i = 0;
         while (!!this.procBuffer[i]) {
+
+            if (!this.ready) {
+                console.error(new Date(), "(" + this.endpoint.name + ") Now ready!");
+                this.ready = true;
+            }
+
             // Diffs are already reversed by Server!
             let diffs = this.procBuffer[i];
             this.outstandingDiffs--;
@@ -96,13 +106,15 @@ class SharedObjectClient extends EventEmitter {
             if (this.outstandingDiffsTimeout) {
                 console.error(new Date(), "(" + this.endpoint.name + ") Managed to process messages. Clearing the outstanding diffs timer.");
                 clearTimeout(this.outstandingDiffsTimeout);
+                delete this.outstandingDiffsTimeout;
             }
 
         } else if (this.ready && this.outstandingDiffs > 10) {
             if (!this.outstandingDiffsTimeout) {
                 console.error(new Date(), "(" + this.endpoint.name + ") Too many outstanding diffs. Starting the re-init timer.");
                 this.outstandingDiffsTimeout = setTimeout( () => {
-                    console.error(new Date(), "(" + this.endpoint.name + ") Actually calling init now afer outstanding diffs.");
+                    console.error(new Date(), "(" + this.endpoint.name + ") Actually calling init now after outstanding diffs.");
+                    delete this.outstandingDiffsTimeout;
                     this._init();
                 }, OUTSTANDINGDIFFSTIMEOUT);
             }
@@ -121,12 +133,6 @@ class SharedObjectClient extends EventEmitter {
         this.outstandingDiffs = 0;
 
         this.ready = false;
-    }
-
-    _reInit() {
-        this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
-        this.updateTransport.subscribe("_SO_" + this.endpoint.name);
-        this._init();
     }
 
     _init() {
@@ -171,7 +177,7 @@ class SharedObjectClient extends EventEmitter {
                         self.outstandingDiffs++;
                 }
 
-                setTimeout(() => { self.ready = true; }, 30000);
+                //setTimeout(() => { self.ready = true; }, 30000);
 
                 self._tryApply();
                 self.emit('init', {v: answer.res.v, data: answer.res.data});
@@ -181,7 +187,7 @@ class SharedObjectClient extends EventEmitter {
         var self = this;
         req.on('error', (e) => {
             console.error(`problem with request: ${e.message}`);
-            setTimeout(self._reInit.bind(self), 1000); // Retry after a second
+            setTimeout(self._init.bind(self), 1000); // Retry after a second
         });
         req.write(postData);
         req.end();

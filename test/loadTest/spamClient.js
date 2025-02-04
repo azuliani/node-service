@@ -53,12 +53,25 @@ var initials = {
 var c = new service.Client(descriptor);
 c.SO.subscribe();
 
-var clientUpdates = 0;
+
+var updateCalls = 0;
+var receivedDiffs = 0;
+
 c.SO.on('update', (diffs)=> {
-    clientUpdates+=diffs.length;
+    updateCalls++;
+    receivedDiffs += diffs.length;
 });
 
 setInterval(() => {
-    console.log(clientUpdates, "client updates");
-    clientUpdates = 0;
+    console.log(receivedDiffs, "diffs in", updateCalls, "calls");
+    updateCalls = 0;
+    receivedDiffs = 0;
 },1000)
+
+setTimeout(() => {
+    console.log("Locking up for a bit");
+    let x = 10;
+    for(let i=0; i < 1000000000; i++) {
+        x++
+    }
+},10000)

@@ -44,7 +44,10 @@ class Service {
 
     _setupSource(hostname) {
         var sock = new zmq.socket('pub');
+
+        sock.setsockopt(zmq.ZMQ_SNDHWM, 10000);
         sock.setsockopt(zmq.ZMQ_LINGER, 0);
+        sock.setsockopt(39, 1); // ZMQ_IMMEDIATE
 
         this.transports.source = sock;
         sock.bind(hostname);
