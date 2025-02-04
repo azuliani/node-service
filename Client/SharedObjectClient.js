@@ -35,23 +35,21 @@ class SharedObjectClient extends EventEmitter {
     _processMessage(data) {
         if (data.endpoint === "_SO_" + this.endpoint.name) {
 
-            var idx = data.message.v - (this._v + 1);
+            if (!this.lastChange) {
+                if (data.message.v <= this._v) {
+                    return;
+                }
+                this.lastChange = data.message;
+                this.firstChange = this.lastChange;
 
-            if (Math.random() < 0.001) {
-                //console.log("idx",idx)
-            }
-
-            if (idx < 0) {
-                if (this.ready) {
-                    console.error(new Date(), "(" + this.endpoint.name + ") Old version! Reinit!");
+            } else {
+                if (this.lastChange.v + 1 !== data.message.v) {
+                    console.error(new Date(), "(" + this.endpoint.name + ") Have an out of order arrival! Reinit.");
                     return this._init();
                 }
-
-                return // console.error("Received older version but only recently inited.");
+                this.lastChange.next = data.message;
+                this.lastChange = this.lastChange.next;
             }
-
-            this.procBuffer[idx] = data.message.diffs;
-            this.timeBuffer[idx] = new Date(data.message.now);
 
             this.outstandingDiffs++;
 
@@ -61,19 +59,19 @@ class SharedObjectClient extends EventEmitter {
 
     _tryApply() {
         var totalDiffs = [];
-        let now = new Date();
+        let now = +(new Date());
 
-        let i = 0;
-        while (!!this.procBuffer[i]) {
+        if (!this.firstChange || !this.ready) {
+            return;
+        }
 
-            if (!this.ready) {
-                console.error(new Date(), "(" + this.endpoint.name + ") Now ready!");
-                this.ready = true;
-            }
+
+        let ptr = this.firstChange;
+
+        while (ptr) {
 
             // Diffs are already reversed by Server!
-            let diffs = this.procBuffer[i];
-            this.outstandingDiffs--;
+            let diffs = ptr.diffs;
             safePush(totalDiffs, diffs)
 
             for(let diff of diffs) {
@@ -81,15 +79,21 @@ class SharedObjectClient extends EventEmitter {
                 differ.applyChange(this.data, true, diff);
             }
 
-            this.timeSum += now - this.timeBuffer[i];
+            this.timeSum += now - new Date(ptr.now);
             this.timeCount++;
 
+            if (ptr.v !== this._v + 1){
+                console.log("lele")
+            }
+            assert(ptr.v === this._v + 1);
             this._v++;
-            i++;
+
+            ptr = ptr.next;
         }
 
-        this.procBuffer.splice(0, i);
-        this.timeBuffer.splice(0, i);
+        this.firstChange = null;
+        this.lastChange = null;
+        this.outstandingDiffs = 0;
 
         if (totalDiffs.length > 0) {
 
@@ -124,13 +128,13 @@ class SharedObjectClient extends EventEmitter {
     _flushData() {
         this.data = {};
         this._v = 0;
-        this.procBuffer = [];
-        this.timeBuffer = [];
+
+        this.firstChange = null;
+        this.lastChange = null;
+        this.outstandingDiffs = 0;
 
         this.timeSum = 0;
         this.timeCount = 0;
-
-        this.outstandingDiffs = 0;
 
         this.ready = false;
     }
@@ -157,30 +161,38 @@ class SharedObjectClient extends EventEmitter {
         var self = this;
         var req = http.request(options, (reply) => {
             var body = "";
-            reply.on('data', function (data) {
+            reply.on('data', (data) => {
                 body += data;
             });
-            reply.on('end', function () {
-                var answer = JSON.parse(body);
+            reply.on('end', () => {
+                    var answer = JSON.parse(body);
 
-                parseFullDates(self.endpoint, answer.res.data);
-                self.data = answer.res.data;
-                self._v = answer.res.v;
+                    parseFullDates(this.endpoint, answer.res.data);
+                    this.data = answer.res.data;
+                    this._v = answer.res.v;
 
-                console.error(new Date(), "(" + self.endpoint.name + ") Init installed version", self._v);
+                    let ptr = this.firstChange;
+                    let skipped = 0;
+                    while (ptr && ptr.v <= answer.res.v) {
+                        ptr = ptr.next;
+                        skipped++;
+                    }
 
-                self.procBuffer.splice(0, self._v);
-                self.timeBuffer.splice(0, self._v);
-                self.outstandingDiffs = 0;
-                for (let i of self.procBuffer) {
-                    if (!!i)
-                        self.outstandingDiffs++;
-                }
+                    this.firstChange = ptr;
+                    this.lastChange = null;
+                    this.outstandingDiffs = 0;
 
-                //setTimeout(() => { self.ready = true; }, 30000);
+                    while (ptr) {
+                        this.outstandingDiffs++;
+                        this.lastChange = ptr;
+                        ptr = ptr.next;
+                    }
 
-                self._tryApply();
-                self.emit('init', {v: answer.res.v, data: answer.res.data});
+                    console.error(`${new Date()} (${this.endpoint.name}) Init installed version ${answer.res.v}. Skipped ${skipped} past changes. Have ${this.outstandingDiffs} outstanding changes.`);
+
+                    this.ready = true;
+                    this._tryApply();
+                    this.emit('init', {v: answer.res.v, data: answer.res.data});
             });
         });
 

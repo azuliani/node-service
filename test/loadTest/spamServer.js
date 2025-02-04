@@ -59,7 +59,7 @@ setInterval(() => {
 },1000)
 
 function thing() {
-    for(let i = 0; i < Math.random()*500; i++) {
+    for(let i = 0; i < Math.random()*5000; i++) {
         s.SO.data.now = new Date();
         s.SO.data.rand = Math.random();
         s.SO.notify();
