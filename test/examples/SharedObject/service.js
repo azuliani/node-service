@@ -8,6 +8,12 @@ var SharedObjectSchema = {
         },
         now: {
             type: 'date'
+        },
+        theArray: {
+            type: 'array',
+            items: {
+                type: 'number'
+            }
         }
     }
 };

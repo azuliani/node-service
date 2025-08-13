@@ -8,6 +8,7 @@ c.SO.on('init',()=>{
 
 c.SO.on('update',(diffs) => {
     console.log("Client object was updated:", c.SO.data);
+    console.log(diffs);
 });
 
 c.SO.subscribe();
