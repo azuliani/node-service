@@ -1,8 +1,8 @@
 "use strict";
 
-var assert = require("assert");
-var fastcopy = require("fast-copy").default;
-var doValidate = require("../misc/Validation").SharedObjectValidation;
+const assert = require("assert");
+const fastcopy = require("fast-copy").default;
+const doValidate = require("../misc/Validation").SharedObjectValidation;
 const deepDiff = require("deep-diff");
 
 class SharedObjectService{
@@ -31,19 +31,19 @@ class SharedObjectService{
     }
 
     notify(hint, dirtyBypass){
-        var now = new Date();
+        const now = new Date();
 
         if (!hint)
             hint = [];
 
         doValidate(this.endpoint, this.data, hint);
 
-        var diffs = diffAndReverseAndApplyWithHint(this._lastTransmit, this.data, hint, dirtyBypass);
+        const diffs = diffAndReverseAndApplyWithHint(this._lastTransmit, this.data, hint, dirtyBypass);
 
         if (diffs && diffs.length) {
             this.stats.updates++;
             this._v++;
-            var OTW = {
+            const OTW = {
                 endpoint: "_SO_" + this.endpoint.name,
                 message: {diffs, v: this._v, now}
             };
@@ -52,17 +52,17 @@ class SharedObjectService{
     }
 
     getStats(){
-        var current_stats = JSON.parse(JSON.stringify(this.stats));
+        const current_stats = JSON.parse(JSON.stringify(this.stats));
         this.stats.updates = 0;
         return current_stats;
     }
 }
 
 function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
-    var lhsWithHint = lhs;
-    var rhsWithHint = rhs;
-    var lhsParent = null;
-    var i = 0;
+    let lhsWithHint = lhs;
+    let rhsWithHint = rhs;
+    let lhsParent = null;
+    let i = 0;
 
     while(i < hint.length){
         // Stop if add or delete.
@@ -77,13 +77,13 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
         i++;
     }
 
-    var hintUsed = hint.slice(0,i);
+    const hintUsed = hint.slice(0,i);
 
-    var reportDiffs = []; // Separate because of clone changes
+    const reportDiffs = []; // Separate because of clone changes
 
     if (hintUsed.length < hint.length){ // SHORTCUT
          if (!(hint[i] in lhsWithHint) && (hint[i] in rhsWithHint)){ // SHORTCUT ADD
-             var cloned = fastcopy(rhsWithHint[hint[i]]);
+             const cloned = fastcopy(rhsWithHint[hint[i]]);
              reportDiffs.push({kind: 'N', path: [...hintUsed, hint[i]], rhs: cloned});
              lhsWithHint[hint[i]] = cloned
          }else if (!(hint[i] in rhsWithHint)){ // SHORTCUT DEL
@@ -94,10 +94,10 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
          }
     } else {
         if (!bypass) {
-            var diffs = deepDiff.diff(lhsWithHint, rhsWithHint);
+            const diffs = deepDiff.diff(lhsWithHint, rhsWithHint);
             if (diffs) {
                 for (let i = diffs.length - 1; i >= 0; i--) {
-                    var diff = fastcopy(diffs[i]);
+                    const diff = fastcopy(diffs[i]);
                     if (diff.path) {
                         diff.path = [...hintUsed, ...diff.path];
                     } else {

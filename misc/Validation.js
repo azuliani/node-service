@@ -1,8 +1,8 @@
 "use strict";
 
-var assert = require("assert");
-var inspector = require("schema-inspector");
-var Tinycache = require("tinycache");
+const assert = require("assert");
+const inspector = require("schema-inspector");
+const Tinycache = require("tinycache");
 
 function RPCValidation(endpoint, inout, obj, parseDates){
     assert(parseDates === true || parseDates === false);
@@ -35,7 +35,7 @@ function RPCValidation(endpoint, inout, obj, parseDates){
     if (!schema){
         console.error("There's no schema for RPC Call " + endpoint.name + ". Fix this!");
     } else {
-        var validation = inspector.validate(schema, obj);
+        const validation = inspector.validate(schema, obj);
         if (!validation.valid){
             throw new Error("Validation failed! " + validation.format());
         }
@@ -45,7 +45,7 @@ function RPCValidation(endpoint, inout, obj, parseDates){
 function SourceSinkValidation(endpoint, obj, parseDates){
     assert(parseDates === true || parseDates === false);
 
-    var schema = endpoint.messageSchema;
+    const schema = endpoint.messageSchema;
 
     if(schema.skip){
         return
@@ -65,7 +65,7 @@ function SourceSinkValidation(endpoint, obj, parseDates){
         }
     }
 
-    var validation = inspector.validate(schema, obj);
+    const validation = inspector.validate(schema, obj);
 
     if (!validation.valid){
         throw new Error("Validation failed! " + validation.format());
@@ -87,12 +87,12 @@ function SharedObjectValidation(endpoint, obj, hint){
         return
     }
 
-    var subs = _getSubsForHint(endpoint.objectSchema, obj, hint);
+    const subs = _getSubsForHint(endpoint.objectSchema, obj, hint);
 
-    var schema = subs.schema;
+    const schema = subs.schema;
     obj = subs.obj;
 
-    var validation = inspector.validate(schema, obj);
+    const validation = inspector.validate(schema, obj);
 
     if (!validation.valid) {
         throw new Error("Validation failed! " + validation.format());
@@ -100,7 +100,7 @@ function SharedObjectValidation(endpoint, obj, hint){
 }
 
 function parseDiffDates(endpoint, diff) {
-    var schema = endpoint.objectSchema;
+    const schema = endpoint.objectSchema;
 
     if (schema.skip) {
         return;
@@ -168,7 +168,7 @@ function parseDiffDates(endpoint, diff) {
 function parseFullDates(endpoint, obj) {
     assert(endpoint.objectSchema);
 
-    var schema = endpoint.objectSchema;
+    const schema = endpoint.objectSchema;
 
     if(schema.skip){
         return
@@ -184,7 +184,7 @@ function parseFullDates(endpoint, obj) {
         }
     }
 
-    var validation = inspector.validate(schema, obj);
+    const validation = inspector.validate(schema, obj);
 
     if (!validation.valid){
         throw new Error("Validation failed! " + validation.format());
@@ -192,7 +192,7 @@ function parseFullDates(endpoint, obj) {
 }
 
 function _getSubsForHint(schema, obj, hint){
-    var i = 0;
+    let i = 0;
     while(i < hint.length){
         if (!(hint[i] in obj)) {
             break; // On delete, validate entire parent. Otherwise possible missing items may not be caught.

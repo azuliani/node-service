@@ -1,7 +1,7 @@
 "use strict";
 
-var Service = require("./Service/Service");
-var Client = require("./Client/Client");
+const Service = require("./Service/Service");
+const Client = require("./Client/Client");
 
 module.exports = {
     Service,

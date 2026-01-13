@@ -1,8 +1,8 @@
 "use strict";
 
-var assert = require("assert");
+const assert = require("assert");
 
-var doValidation = require("../misc/Validation").RPCValidation;
+const doValidation = require("../misc/Validation").RPCValidation;
 
 class RPCService{
     constructor(endpoint, handler){
@@ -24,13 +24,13 @@ class RPCService{
                 doValidation(this.endpoint, 'output', res, false);
             }
 
-            var reply = JSON.stringify({err,res});
+            const reply = JSON.stringify({err,res});
             callback(reply);
         });
     }
 
     getStats(){
-        var current_stats = JSON.parse(JSON.stringify(this.stats));
+        const current_stats = JSON.parse(JSON.stringify(this.stats));
         this.stats.updates = 0;
         return current_stats;
     }

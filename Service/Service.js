@@ -1,21 +1,22 @@
 "use strict";
 
-var zmq = require("zeromq/v5-compat");
-var http = require("http");
-var EventEmitter = require("events").EventEmitter;
+const zmq = require("zeromq/v5-compat");
+const http = require("http");
+const EventEmitter = require("events").EventEmitter;
 
-var RPCService = require("./RPCService");
-var SourceService = require("./SourceService");
-var SharedObjectService = require("./SharedObjectService");
-var PushService = require("./PushService");
-var SinkService = require("./SinkService");
+const RPCService = require("./RPCService");
+const SourceService = require("./SourceService");
+const SharedObjectService = require("./SharedObjectService");
+const PushService = require("./PushService");
+const SinkService = require("./SinkService");
 
 class Service {
-    constructor(descriptor, handlers, initials) {
+    constructor(descriptor, handlers, initials, options = {}) {
         this.descriptor = descriptor;
         this.transports = {};
         this.handlers = handlers || {};
         this.initials = initials || {};
+        this._heartbeatMs = options.heartbeatMs ?? 5000;
 
         this._setupTransports();
         this._setupEndpoints();
@@ -43,7 +44,7 @@ class Service {
     }
 
     _setupSource(hostname) {
-        var sock = new zmq.socket('pub');
+        const sock = new zmq.socket('pub');
 
         sock.setsockopt(zmq.ZMQ_SNDHWM, 10000);
         sock.setsockopt(zmq.ZMQ_LINGER, 0);
@@ -55,18 +56,19 @@ class Service {
     }
 
     _setupHeartbeat() {
-        this._heartbeatInterval = setInterval(this._sendHeartbeat.bind(this), 5 * 1000);
+        this._heartbeatInterval = setInterval(this._sendHeartbeat.bind(this), this._heartbeatMs);
     }
 
     _sendHeartbeat() {
-        var OTW = {
-            endpoint: '_heartbeat'
+        const OTW = {
+            endpoint: '_heartbeat',
+            frequencyMs: this._heartbeatMs
         };
         this.transports.source.send([OTW.endpoint, JSON.stringify(OTW)]);
     }
 
     _setupSink(hostname) {
-        var sock = new zmq.socket('pull');
+        const sock = new zmq.socket('pull');
         this.transports.sink = sock;
 
         sock.bind(hostname);
@@ -83,30 +85,30 @@ class Service {
     _setupRpc(hostname) {
         this.transports.rpc = new EventEmitter();
 
-        var hostnameAndPort = hostname.split(":");
-        var url = hostnameAndPort[1].substr(2);
-        var port = hostnameAndPort[2];
+        const hostnameAndPort = hostname.split(":");
+        const url = hostnameAndPort[1].substr(2);
+        const port = hostnameAndPort[2];
         this._httpServer = http.createServer(this._rpcCallback.bind(this));
         this._httpServer.listen(port, url);
     }
 
     _rpcCallback(req, res) {
-        if (req.method == 'POST') {
-            var body = "";
+        if (req.method === 'POST') {
+            let body = "";
             req.on('data', function (data) {
                 body += data;
             });
-            var self = this;
+            const self = this;
             req.on('end', function () {
                 res.writeHead(200, {'Content-Type': 'application/json'});
-                var req = JSON.parse(body);
-                var handler = self.RPCServices[req.endpoint];
+                const parsedReq = JSON.parse(body);
+                const handler = self.RPCServices[parsedReq.endpoint];
                 if (handler) { // Could be SharedObject, has a different callback
-                    handler.call(req, (result) => {
+                    handler.call(parsedReq, (result) => {
                         res.end(result);
                     });
                 }else{
-                    self.transports.rpc.emit("message", req, (result)=>{
+                    self.transports.rpc.emit("message", parsedReq, (result)=>{
                         res.end(JSON.stringify(result));
                     })
                 }
@@ -120,7 +122,7 @@ class Service {
     }
 
     _setupPushPull(hostname) {
-        var sock = new zmq.socket('push');
+        const sock = new zmq.socket('push');
         sock.bind(hostname);
         this.transports.pushpull = sock;
     }
@@ -130,12 +132,13 @@ class Service {
 
         for (let endpoint of this.descriptor.endpoints) {
             switch (endpoint.type) {
-                case 'RPC':
-                    var handler = this.handlers[endpoint.name];
+                case 'RPC': {
+                    const handler = this.handlers[endpoint.name];
                     if (!handler)
                         throw "Missing handler: " + endpoint.name;
                     this.RPCServices[endpoint.name] = new RPCService(endpoint, handler);
                     break;
+                }
                 case 'Source':
                     this[endpoint.name] = new SourceService(endpoint, this.transports);
                     break;

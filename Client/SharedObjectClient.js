@@ -1,11 +1,11 @@
 "use strict";
 
-var assert = require("assert");
-var http = require("http");
-var EventEmitter = require("events").EventEmitter;
+const assert = require("assert");
+const http = require("http");
+const EventEmitter = require("events").EventEmitter;
 const deepDiff = require("deep-diff");
-var parseDiffDates = require("../misc/Validation").parseDiffDates;
-var parseFullDates = require("../misc/Validation").parseFullDates;
+const parseDiffDates = require("../misc/Validation").parseDiffDates;
+const parseFullDates = require("../misc/Validation").parseFullDates;
 
 const REPORTEVERY = 2000;
 const OUTSTANDINGDIFFSTIMEOUT = 2000;
@@ -19,17 +19,35 @@ class SharedObjectClient extends EventEmitter {
         this.endpoint = endpoint;
         this.initTransport = transports.rpc;
         this.updateTransport = transports.source;
-        this._initDelay = options.initDelay !== undefined ? options.initDelay : 1000;
+        this._initDelay = options.initDelay ?? 100;
+
+        // Connection and subscription state
+        this._connected = false;
+        this._subscribed = false;
+
+        // Listen to events emitted by parent Client
+        this.on('connected', () => { this._connected = true; });
+        this.on('disconnected', () => { this._connected = false; });
 
         this._flushData();
     }
 
+    get connected() {
+        return this._connected;
+    }
+
+    get subscribed() {
+        return this._subscribed;
+    }
+
     subscribe() {
+        this._subscribed = true;
         this.updateTransport.subscribe("_SO_" + this.endpoint.name);
         setTimeout(() => { this._init() }, this._initDelay);
     }
 
     unsubscribe() {
+        this._subscribed = false;
         this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
         if (this.endpoint.slicedCache) {
             this.endpoint.slicedCache.clear();
@@ -62,8 +80,8 @@ class SharedObjectClient extends EventEmitter {
     }
 
     _tryApply() {
-        var totalDiffs = [];
-        let now = +(new Date());
+        const totalDiffs = [];
+        const now = +(new Date());
 
         if (!this.firstChange || !this.ready) {
             return;
@@ -143,15 +161,34 @@ class SharedObjectClient extends EventEmitter {
         this.ready = false;
     }
 
+    _emitDisconnectDiffs() {
+        // Generate synthetic diffs showing all properties deleted
+        const diffs = [];
+        for (const key of Object.keys(this.data)) {
+            diffs.push({
+                kind: 'D',           // Deletion
+                path: [key],
+                lhs: this.data[key]  // The value being deleted
+            });
+        }
+        if (diffs.length > 0) {
+            this.emit('update', diffs);
+        }
+    }
+
     _init() {
+        // Don't re-init if user has unsubscribed
+        if (!this._subscribed) {
+            return;
+        }
 
         this._flushData();
 
-        var postData = JSON.stringify({
+        const postData = JSON.stringify({
             endpoint: "_SO_" + this.endpoint.name,
             input: "init"
         });
-        var options = {
+        const options = {
             hostname: this.initTransport.hostname,
             port: this.initTransport.port,
             path: '/',
@@ -162,14 +199,14 @@ class SharedObjectClient extends EventEmitter {
             }
         };
 
-        var self = this;
-        var req = http.request(options, (reply) => {
-            var body = "";
+        const self = this;
+        const req = http.request(options, (reply) => {
+            let body = "";
             reply.on('data', (data) => {
                 body += data;
             });
             reply.on('end', () => {
-                    var answer = JSON.parse(body);
+                    const answer = JSON.parse(body);
 
                     parseFullDates(this.endpoint, answer.res.data);
                     this.data = answer.res.data;
@@ -200,7 +237,6 @@ class SharedObjectClient extends EventEmitter {
             });
         });
 
-        var self = this;
         req.on('error', (e) => {
             console.error(`problem with request: ${e.message}`);
             setTimeout(self._init.bind(self), 1000); // Retry after a second

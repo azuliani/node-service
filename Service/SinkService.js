@@ -1,6 +1,6 @@
 "use strict";
 
-var EventEmitter = require("events").EventEmitter;
+const EventEmitter = require("events").EventEmitter;
 
 class SinkService extends EventEmitter {
     constructor(endpoint, transports, hostname) {
@@ -27,7 +27,7 @@ class SinkService extends EventEmitter {
     }
 
     getStats(){
-        var current_stats = JSON.parse(JSON.stringify(this.stats));
+        const current_stats = JSON.parse(JSON.stringify(this.stats));
         this.stats.updates = 0;
         return current_stats;
     }

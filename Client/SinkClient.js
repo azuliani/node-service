@@ -1,5 +1,5 @@
 "use strict";
-var doValidation = require("../misc/Validation").SinkValidation;
+const doValidation = require("../misc/Validation").SinkValidation;
 
 
 class SinkClient {
@@ -13,7 +13,7 @@ class SinkClient {
     push(message){
         doValidation(this.endpoint, message, false);
 
-        var OTW = message;
+        const OTW = message;
         this.transport.send(JSON.stringify(OTW));
     }
 }

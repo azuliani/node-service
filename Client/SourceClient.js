@@ -1,7 +1,7 @@
 "use strict";
 
-var EventEmitter = require("events").EventEmitter;
-var doValidate = require("../misc/Validation").SourceValidation;
+const EventEmitter = require("events").EventEmitter;
+const doValidate = require("../misc/Validation").SourceValidation;
 
 class SourceClient extends EventEmitter{
     constructor(endpoint, transports){

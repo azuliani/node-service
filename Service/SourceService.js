@@ -1,6 +1,6 @@
 "use strict";
 
-var doValidation = require("../misc/Validation").SourceValidation;
+const doValidation = require("../misc/Validation").SourceValidation;
 
 class SourceService{
     constructor(endpoint, transports){
@@ -13,7 +13,7 @@ class SourceService{
 
     send(message){
         doValidation(this.endpoint, message, false);
-        var OTW = {
+        const OTW = {
             endpoint: this.endpoint.name,
             message: message
         };
@@ -22,7 +22,7 @@ class SourceService{
     }
 
     getStats(){
-        var current_stats = JSON.parse(JSON.stringify(this.stats));
+        const current_stats = JSON.parse(JSON.stringify(this.stats));
         this.stats.updates = 0;
         return current_stats;
     }

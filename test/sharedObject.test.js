@@ -70,7 +70,7 @@ describe('SharedObject Endpoint', () => {
 
     before(async () => {
         server = new Service(descriptor, {}, { State: { ...initialState } });
-        client = new Client(descriptor, {}, { initDelay: 50 });
+        client = new Client(descriptor, { initDelay: 50 });
 
         await delay(50);
     });

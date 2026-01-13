@@ -1,6 +1,6 @@
 "use strict";
 
-var doValidation = require("../misc/Validation").SinkValidation;
+const doValidation = require("../misc/Validation").SinkValidation;
 
 class SourceService{
     constructor(endpoint, transports){
@@ -14,13 +14,13 @@ class SourceService{
     push(message){
         doValidation(this.endpoint, message, false);
 
-        var OTW = message;
+        const OTW = message;
         this.transport.send(JSON.stringify(OTW));
         this.stats.updates++;
     }
 
     getStats(){
-        var current_stats = JSON.parse(JSON.stringify(this.stats));
+        const current_stats = JSON.parse(JSON.stringify(this.stats));
         this.stats.updates = 0;
         return current_stats;
     }

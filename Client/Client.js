@@ -1,25 +1,28 @@
 "use strict";
-var HEARTBEAT_SECONDS = 10;
 
-var zmq = require("zeromq/v5-compat");
-var MonitoredSocket = require("./MonitoredSocket");
+const zmq = require("zeromq/v5-compat");
+const MonitoredSocket = require("./MonitoredSocket");
 
-var RPCClient = require("./RPCClient");
-var SourceClient = require("./SourceClient");
-var SharedObjectClient = require("./SharedObjectClient");
-var PullClient = require("./PullClient");
-var SinkClient = require("./SinkClient");
+const RPCClient = require("./RPCClient");
+const SourceClient = require("./SourceClient");
+const SharedObjectClient = require("./SharedObjectClient");
+const PullClient = require("./PullClient");
+const SinkClient = require("./SinkClient");
 
 class Client {
-    constructor(descriptor, workers, options = {}){
-        if (!workers){
-            workers = {}
-        }
-
-        this.workers = workers;
+    constructor(descriptor, options = {}){
+        // options.initDelay - Delay in ms before SharedObjectClient calls _init() after subscribe().
+        //                     Allows time to receive queued diffs before fetching full state.
+        //                     Default: 100ms
         this.descriptor = descriptor;
         this.transports = {};
         this._options = options;
+
+        // Timestamp-based heartbeat tracking
+        this._lastSourceMessageTime = null;      // Updated on EVERY source message (O(1))
+        this._serverHeartbeatFrequencyMs = null; // Learned from first heartbeat
+        this._heartbeatCheckInterval = null;     // Periodic check interval
+        this._isSourceConnected = false;         // Track connection state
 
         this.sourceDisconnections = {};
 
@@ -57,34 +60,88 @@ class Client {
         this.transports.source.on('message', this._sourceCallback.bind(this));
         this._monitoredSource.on('disconnected', this._sourceClosed.bind(this));
         this._monitoredSource.on('connected', this._sourceConnected.bind(this));
-    }
 
-    _setupHeartbeat(){
-        this['_heartbeat'] = {
-            _processMessage: this._resetHeartbeatTimeout.bind(this)
-        }
+        // Subscribe to heartbeat channel
         this.transports.source.subscribe('_heartbeat');
     }
 
     _setupSink(hostname){
-        var sock = new zmq.socket('push');
+        const sock = new zmq.socket('push');
         this.transports.sink = sock;
         sock.connect(hostname);
     }
 
     _sourceCallback(endpoint, message){
-        var data = JSON.parse(message);
+        // O(1) timestamp update - MUST be first, before any parsing
+        this._lastSourceMessageTime = Date.now();
+
+        // Mark as connected when we receive messages (more reliable than ZMQ monitor)
+        if (!this._isSourceConnected) {
+            this._isSourceConnected = true;
+            // Emit connected events for endpoints
+            for (let ep of this.descriptor.endpoints) {
+                if (ep.type === 'Source' || ep.type === 'SharedObject') {
+                    console.error(ep.name, 'connected');
+                    this[ep.name].emit('connected');
+                    // Re-init SharedObjects that were disconnected
+                    if (ep.type === 'SharedObject' && this.sourceDisconnections[ep.name]) {
+                        this[ep.name]._init();
+                        delete this.sourceDisconnections[ep.name];
+                    }
+                }
+            }
+        }
+
+        // Handle heartbeat specially
+        if (endpoint.toString() === '_heartbeat') {
+            this._processHeartbeat(JSON.parse(message));
+            return;
+        }
+
+        const data = JSON.parse(message);
         this[endpoint]._processMessage(data);
     }
 
+    _processHeartbeat(data) {
+        // Lazy activation: learn frequency from first heartbeat
+        if (this._serverHeartbeatFrequencyMs === null && data.frequencyMs) {
+            this._serverHeartbeatFrequencyMs = data.frequencyMs;
+            this._startHeartbeatChecking();
+        }
+    }
+
+    _startHeartbeatChecking() {
+        // Check once per heartbeat period
+        this._heartbeatCheckInterval = setInterval(() => {
+            this._checkHeartbeatTimeout();
+        }, this._serverHeartbeatFrequencyMs);
+    }
+
+    _checkHeartbeatTimeout() {
+        if (this._lastSourceMessageTime === null || !this._isSourceConnected) {
+            return;
+        }
+
+        const timeSinceLastMessage = Date.now() - this._lastSourceMessageTime;
+        const timeoutThreshold = this._serverHeartbeatFrequencyMs * 3;
+
+        if (timeSinceLastMessage > timeoutThreshold) {
+            this._heartbeatFailed();
+        }
+    }
+
     _sourceConnected(){
-        // this._heartbeatTimeout = setTimeout(this._heartbeatFailed.bind(this), HEARTBEAT_SECONDS * 1000);
-        // Loop endpoints
+        // Idempotent - may already be marked connected by _sourceCallback
+        if (this._isSourceConnected) return;
+        this._isSourceConnected = true;
+        this._lastSourceMessageTime = Date.now();  // Reset on reconnect
+
         for(let endpoint of this.descriptor.endpoints) {
             if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
                 console.error(endpoint.name, 'connected');
                 this[endpoint.name].emit('connected');
                 if (endpoint.type === 'SharedObject' && this.sourceDisconnections[endpoint.name]) {
+                    // _init() now guards against being called when not subscribed
                     this[endpoint.name]._init();
                     delete this.sourceDisconnections[endpoint.name];
                 }
@@ -93,23 +150,21 @@ class Client {
     }
 
     _sourceClosed(){
-        clearTimeout(this._heartbeatTimeout);
-        // Loop endpoints
+        // Idempotent - prevent double-firing
+        if (!this._isSourceConnected) return;
+        this._isSourceConnected = false;
+
         for(let endpoint of this.descriptor.endpoints) {
             if (endpoint.type === 'Source' || endpoint.type === 'SharedObject') {
                 console.error(endpoint.name, 'disconnected');
                 this[endpoint.name].emit('disconnected');
                 if (endpoint.type === 'SharedObject') {
+                    this[endpoint.name]._emitDisconnectDiffs();  // BEFORE flush
                     this[endpoint.name]._flushData();
                     this.sourceDisconnections[endpoint.name] = true;
                 }
             }
         }
-    }
-
-    _resetHeartbeatTimeout(){
-        clearTimeout(this._heartbeatTimeout);
-        this._heartbeatTimeout = setTimeout(this._heartbeatFailed.bind(this), HEARTBEAT_SECONDS * 1000);
     }
 
     _heartbeatFailed(){
@@ -120,14 +175,14 @@ class Client {
     }
 
     _setupRpc(origHostname) {
-        var hostnameAndPort = origHostname.split(":");
-        var hostname = hostnameAndPort[1].substr(2);
-        var port = hostnameAndPort[2];
+        const hostnameAndPort = origHostname.split(":");
+        const hostname = hostnameAndPort[1].substr(2);
+        const port = hostnameAndPort[2];
         this.transports.rpc = {hostname, port};
     }
 
     _setupPull(hostname){
-        var sock = new zmq.socket("pull");
+        const sock = new zmq.socket("pull");
         // DON'T CONNECT! Client must explicitly ask!
         sock.on('message', this._pullCallback.bind(this));
         this.transports.pushpull = sock;
@@ -172,8 +227,9 @@ class Client {
     }
 
     close() {
-        if (this._heartbeatTimeout) {
-            clearTimeout(this._heartbeatTimeout);
+        if (this._heartbeatCheckInterval) {
+            clearInterval(this._heartbeatCheckInterval);
+            this._heartbeatCheckInterval = null;
         }
         if (this._monitoredSource) {
             this._monitoredSource.close();

@@ -1,7 +1,7 @@
 "use strict";
 
-var http = require('http');
-var doValidation = require("../misc/Validation").RPCValidation;
+const http = require('http');
+const doValidation = require("../misc/Validation").RPCValidation;
 
 class RPCClient {
     constructor(endpoint, transports) {
@@ -12,7 +12,7 @@ class RPCClient {
     }
 
     call(input, timeout, callback) {
-        var self = this;
+        const self = this;
         if (!callback) { // Make compatible with old code
             callback = timeout;
             timeout = 10e3;
@@ -20,18 +20,18 @@ class RPCClient {
 
         doValidation(this.endpoint, 'input', input, false);
 
-        var answer_received = false;
-        var answer_timeout = setTimeout(() => {
+        let answer_received = false;
+        let answer_timeout = setTimeout(() => {
             if (!answer_received)
                 callback('timeout');
             callback = null;
             answer_received = null;
         }, timeout);
-        var postData = JSON.stringify({
+        const postData = JSON.stringify({
             endpoint: this.endpoint.name,
             input: input
         });
-        var options = {
+        const options = {
             hostname: this.transport.hostname,
             port: this.transport.port,
             path: '/',
@@ -41,17 +41,17 @@ class RPCClient {
                 'Content-Length': Buffer.byteLength(postData)
             }
         };
-        var req = http.request(options, (answer) => {
+        const req = http.request(options, (answer) => {
             answer_received = true;
             clearTimeout(answer_timeout);
             answer_timeout = null;
 
-            var body = "";
+            let body = "";
             answer.on('data', function (data) {
                 body += data;
             });
             answer.on('end', function () {
-                var answer = JSON.parse(body);
+                const answer = JSON.parse(body);
 
                 if (!answer.err) {
                     doValidation(self.endpoint, 'output', answer.res, true);
