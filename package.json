@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "description": "Todo",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "author": "Alexander Zuliani",
   "license": "MIT",
   "dependencies": {
-    "deep-diff": "^1.0.2",
+    "deep-diff": "github:azuliani/deep-diff",
     "fast-copy": "^3.0.2",
     "json.date-extensions": "^1.2.2",
     "schema-inspector": "^2.1.0",

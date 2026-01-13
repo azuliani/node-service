@@ -3,7 +3,7 @@
 var assert = require("assert");
 var fastcopy = require("fast-copy").default;
 var doValidate = require("../misc/Validation").SharedObjectValidation;
-var differ = require("deep-diff");
+const deepDiff = require("deep-diff");
 
 class SharedObjectService{
     constructor(endpoint, transports, initial){
@@ -94,7 +94,7 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
          }
     } else {
         if (!bypass) {
-            var diffs = differ(lhsWithHint, rhsWithHint);
+            var diffs = deepDiff.diff(lhsWithHint, rhsWithHint);
             if (diffs) {
                 for (let i = diffs.length - 1; i >= 0; i--) {
                     var diff = fastcopy(diffs[i]);
@@ -103,7 +103,7 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
                     } else {
                         diff.path = hintUsed;
                     }
-                    differ.applyChange(lhs, rhs, diff);
+                    deepDiff.applyChange(lhs, rhs, diff);
                     reportDiffs.push(diff);
                 }
             }

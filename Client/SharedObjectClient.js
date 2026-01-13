@@ -3,7 +3,7 @@
 var assert = require("assert");
 var http = require("http");
 var EventEmitter = require("events").EventEmitter;
-var differ = require("deep-diff");
+const deepDiff = require("deep-diff");
 var parseDiffDates = require("../misc/Validation").parseDiffDates;
 var parseFullDates = require("../misc/Validation").parseFullDates;
 
@@ -11,7 +11,7 @@ const REPORTEVERY = 2000;
 const OUTSTANDINGDIFFSTIMEOUT = 2000;
 
 class SharedObjectClient extends EventEmitter {
-    constructor(endpoint, transports) {
+    constructor(endpoint, transports, options = {}) {
         super();
         if (!transports.rpc || !transports.source)
             throw new Error("Shared object " + endpoint.name + " needs both Source and RPC transports to be configured");
@@ -19,17 +19,21 @@ class SharedObjectClient extends EventEmitter {
         this.endpoint = endpoint;
         this.initTransport = transports.rpc;
         this.updateTransport = transports.source;
+        this._initDelay = options.initDelay !== undefined ? options.initDelay : 1000;
 
         this._flushData();
     }
 
     subscribe() {
         this.updateTransport.subscribe("_SO_" + this.endpoint.name);
-        setTimeout(() => { this._init() }, 1000);
+        setTimeout(() => { this._init() }, this._initDelay);
     }
 
     unsubscribe() {
         this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
+        if (this.endpoint.slicedCache) {
+            this.endpoint.slicedCache.clear();
+        }
     }
 
     _processMessage(data) {
@@ -76,8 +80,8 @@ class SharedObjectClient extends EventEmitter {
 
             for(let diff of diffs) {
                 parseDiffDates(this.endpoint, diff);
-                differ.applyChange(this.data, true, diff);
             }
+            deepDiff.applyDiff(this.data, diffs);
 
             this.timeSum += now - new Date(ptr.now);
             this.timeCount++;

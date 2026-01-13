@@ -11,7 +11,7 @@ var PullClient = require("./PullClient");
 var SinkClient = require("./SinkClient");
 
 class Client {
-    constructor(descriptor, workers){
+    constructor(descriptor, workers, options = {}){
         if (!workers){
             workers = {}
         }
@@ -19,6 +19,7 @@ class Client {
         this.workers = workers;
         this.descriptor = descriptor;
         this.transports = {};
+        this._options = options;
 
         this.sourceDisconnections = {};
 
@@ -48,15 +49,14 @@ class Client {
     }
 
     _setupSource(hostname){
-        var msock = new MonitoredSocket('sub');
-        this.transports.source = msock.sock;
+        this._monitoredSource = new MonitoredSocket('sub');
+        this.transports.source = this._monitoredSource.sock;
 
         this.transports.source.connect(hostname);
         this._sourceHostname = hostname;
-        // this._setupHeartbeat();
         this.transports.source.on('message', this._sourceCallback.bind(this));
-        msock.on('disconnected', this._sourceClosed.bind(this));
-        msock.on('connected', this._sourceConnected.bind(this));
+        this._monitoredSource.on('disconnected', this._sourceClosed.bind(this));
+        this._monitoredSource.on('connected', this._sourceConnected.bind(this));
     }
 
     _setupHeartbeat(){
@@ -151,7 +151,7 @@ class Client {
                     this[endpoint.name] = new SourceClient(endpoint, this.transports);
                     break;
                 case 'SharedObject':
-                    this[endpoint.name] = new SharedObjectClient(endpoint, this.transports);
+                    this[endpoint.name] = new SharedObjectClient(endpoint, this.transports, this._options);
                     this['_SO_'+endpoint.name] = this[endpoint.name];
                     break;
                 case 'PushPull':
@@ -168,6 +168,21 @@ class Client {
                 default:
                     throw "Unknown endpoint type.";
             }
+        }
+    }
+
+    close() {
+        if (this._heartbeatTimeout) {
+            clearTimeout(this._heartbeatTimeout);
+        }
+        if (this._monitoredSource) {
+            this._monitoredSource.close();
+        }
+        if (this.transports.sink) {
+            this.transports.sink.close();
+        }
+        if (this.transports.pushpull) {
+            this.transports.pushpull.close();
         }
     }
 }

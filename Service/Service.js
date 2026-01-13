@@ -55,7 +55,7 @@ class Service {
     }
 
     _setupHeartbeat() {
-        setInterval(this._sendHeartbeat.bind(this), 5 * 1000);
+        this._heartbeatInterval = setInterval(this._sendHeartbeat.bind(this), 5 * 1000);
     }
 
     _sendHeartbeat() {
@@ -86,8 +86,8 @@ class Service {
         var hostnameAndPort = hostname.split(":");
         var url = hostnameAndPort[1].substr(2);
         var port = hostnameAndPort[2];
-        var sock = http.createServer(this._rpcCallback.bind(this));
-        sock.listen(port, url);
+        this._httpServer = http.createServer(this._rpcCallback.bind(this));
+        this._httpServer.listen(port, url);
     }
 
     _rpcCallback(req, res) {
@@ -152,6 +152,24 @@ class Service {
                 default:
                     throw "Unknown endpoint type";
             }
+        }
+    }
+
+    close() {
+        if (this._heartbeatInterval) {
+            clearInterval(this._heartbeatInterval);
+        }
+        if (this._httpServer) {
+            this._httpServer.close();
+        }
+        if (this.transports.source) {
+            this.transports.source.close();
+        }
+        if (this.transports.sink) {
+            this.transports.sink.close();
+        }
+        if (this.transports.pushpull) {
+            this.transports.pushpull.close();
         }
     }
 }
