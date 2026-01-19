@@ -56,22 +56,26 @@ class SharedObjectClient extends EventEmitter {
 
     _processMessage(data) {
         if (data.endpoint === "_SO_" + this.endpoint.name) {
+            const expectedVersion = this.lastChange ? this.lastChange.v + 1 : this._v + 1;
 
-            if (!this.lastChange) {
-                if (data.message.v <= this._v) {
-                    return;
-                }
-                this.lastChange = data.message;
-                this.firstChange = this.lastChange;
-
-            } else {
-                if (this.lastChange.v + 1 !== data.message.v) {
-                    console.error(new Date(), "(" + this.endpoint.name + ") Have an out of order arrival! Reinit.");
-                    return this._init();
-                }
-                this.lastChange.next = data.message;
-                this.lastChange = this.lastChange.next;
+            // Skip stale messages (already processed, can arrive after re-init)
+            if (!this.lastChange && data.message.v <= this._v) {
+                return;
             }
+
+            // Require sequential versioning
+            if (data.message.v !== expectedVersion) {
+                console.error(new Date(), "(" + this.endpoint.name + ") Out of order message! Expected v=" + expectedVersion + ", got v=" + data.message.v + ". Reinit.");
+                return this._init();
+            }
+
+            // Link message into queue
+            if (!this.lastChange) {
+                this.firstChange = data.message;
+            } else {
+                this.lastChange.next = data.message;
+            }
+            this.lastChange = data.message;
 
             this.outstandingDiffs++;
 
@@ -104,10 +108,11 @@ class SharedObjectClient extends EventEmitter {
             this.timeSum += now - new Date(ptr.now);
             this.timeCount++;
 
-            if (ptr.v !== this._v + 1){
-                console.log("lele")
+            if (ptr.v !== this._v + 1) {
+                console.error(JSON.stringify(diffs,))
             }
-            assert(ptr.v === this._v + 1);
+
+            assert(ptr.v === this._v + 1, `(${this.endpoint.name}) SO Version mismatch: expected ptr.v=${this._v + 1}, got ptr.v=${ptr.v} (current this._v=${this._v})`);
             this._v++;
 
             ptr = ptr.next;
