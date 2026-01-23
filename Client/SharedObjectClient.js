@@ -30,7 +30,15 @@ class SharedObjectClient extends EventEmitter {
         this.on('connected', () => { this._connected = true; });
         this.on('disconnected', () => { this._connected = false; });
 
-        this._flushData();
+        // Initialize state
+        this.data = {};
+        this._v = 0;
+        this.firstChange = null;
+        this.lastChange = null;
+        this.outstandingDiffs = 0;
+        this.timeSum = 0;
+        this.timeCount = 0;
+        this.ready = false;
     }
 
     get connected() {
@@ -166,17 +174,13 @@ class SharedObjectClient extends EventEmitter {
         }
     }
 
-    _flushData() {
+    _prepareForInit() {
+        // Reset state but preserve message queue - it will be filtered
+        // when HTTP snapshot arrives (keeping only v > snapshot version)
         this.data = {};
         this._v = 0;
-
-        this.firstChange = null;
-        this.lastChange = null;
-        this.outstandingDiffs = 0;
-
         this.timeSum = 0;
         this.timeCount = 0;
-
         this.ready = false;
     }
 
@@ -195,13 +199,22 @@ class SharedObjectClient extends EventEmitter {
         }
     }
 
+    _flushData() {
+        // Reset all state on disconnect
+        this._prepareForInit();
+        // Also clear message queue (unlike _prepareForInit which preserves it)
+        this.firstChange = null;
+        this.lastChange = null;
+        this.outstandingDiffs = 0;
+    }
+
     _init() {
         // Don't re-init if user has unsubscribed
         if (!this._subscribed) {
             return;
         }
 
-        this._flushData();
+        this._prepareForInit();
 
         const postData = JSON.stringify({
             endpoint: "_SO_" + this.endpoint.name,
