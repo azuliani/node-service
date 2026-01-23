@@ -102,6 +102,24 @@ Test files: `heartbeat.test.js`, `rpc.test.js`, `source.test.js`, `sink.test.js`
 
 Test helpers in `test/helpers.js`: `waitFor(emitter, event)`, `delay(ms)`, `createDescriptor(basePort, options)`
 
+**CRITICAL: Test Teardown Requirements**
+
+When writing tests that create their own Service/Client pairs:
+1. **Use unique ports** - Each test creating its own server MUST use a unique base port (increment by 100+ from other tests) to avoid port conflicts and cross-test interference
+2. **Teardown order** - Always call `client.State.unsubscribe()` and `client.close()` BEFORE `server.close()` to prevent retry errors
+3. **Wait after unsubscribe** - Add `await delay(50)` after unsubscribe before close to let any in-flight operations settle
+4. **Use createDescriptor** - Use the helper function with unique ports: `createDescriptor(16000, { source: true, rpc: true, endpoints: [...] })`
+
+Example proper teardown:
+```javascript
+// In test cleanup
+testClient.State.unsubscribe();  // Cancels pending init/retry timeouts
+await delay(50);  // Let pending operations settle
+testClient.close();
+testServer.close();
+await delay(50);  // Let sockets fully close
+```
+
 ## Git Commits
 
 Do not add Co-Authored-By lines to commit messages.

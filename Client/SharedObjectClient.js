@@ -24,6 +24,7 @@ class SharedObjectClient extends EventEmitter {
         // Connection and subscription state
         this._connected = false;
         this._subscribed = false;
+        this._initTimeout = null;  // Tracks pending init/retry timeouts
 
         // Listen to events emitted by parent Client
         this.on('connected', () => { this._connected = true; });
@@ -43,11 +44,15 @@ class SharedObjectClient extends EventEmitter {
     subscribe() {
         this._subscribed = true;
         this.updateTransport.subscribe("_SO_" + this.endpoint.name);
-        setTimeout(() => { this._init() }, this._initDelay);
+        this._initTimeout = setTimeout(() => { this._init() }, this._initDelay);
     }
 
     unsubscribe() {
         this._subscribed = false;
+        if (this._initTimeout) {
+            clearTimeout(this._initTimeout);
+            this._initTimeout = null;
+        }
         this.updateTransport.unsubscribe("_SO_" + this.endpoint.name);
         if (this.endpoint.slicedCache) {
             this.endpoint.slicedCache.clear();
@@ -56,20 +61,29 @@ class SharedObjectClient extends EventEmitter {
 
     _processMessage(data) {
         if (data.endpoint === "_SO_" + this.endpoint.name) {
-            const expectedVersion = this.lastChange ? this.lastChange.v + 1 : this._v + 1;
+            // During init (!ready): queue ALL messages regardless of version.
+            // When init snapshot arrives, messages with v <= snapshot are discarded,
+            // and remaining messages are applied in order.
+            //
+            // After init (ready): require sequential versioning. Gaps trigger reinit.
 
-            // Skip stale messages (already processed, can arrive after re-init)
-            if (!this.lastChange && data.message.v <= this._v) {
-                return;
+            if (this.ready) {
+                // Post-init: enforce sequential versioning
+                const expectedVersion = this.lastChange ? this.lastChange.v + 1 : this._v + 1;
+
+                // Skip stale messages (already processed, can arrive after re-init)
+                if (!this.lastChange && data.message.v <= this._v) {
+                    return;
+                }
+
+                // Version gap detected - reinit to recover
+                if (data.message.v !== expectedVersion) {
+                    console.error(new Date(), "(" + this.endpoint.name + ") Out of order message! Expected v=" + expectedVersion + ", got v=" + data.message.v + ". Reinit.");
+                    return this._init();
+                }
             }
 
-            // Require sequential versioning
-            if (data.message.v !== expectedVersion) {
-                console.error(new Date(), "(" + this.endpoint.name + ") Out of order message! Expected v=" + expectedVersion + ", got v=" + data.message.v + ". Reinit.");
-                return this._init();
-            }
-
-            // Link message into queue
+            // Link message into queue (always, during init; sequentially verified, after init)
             if (!this.lastChange) {
                 this.firstChange = data.message;
             } else {
@@ -224,7 +238,7 @@ class SharedObjectClient extends EventEmitter {
                         skipped++;
                     }
 
-                    this.firstChange = ptr;
+                    this.firstChange = ptr || null;
                     this.lastChange = null;
                     this.outstandingDiffs = 0;
 
@@ -244,7 +258,7 @@ class SharedObjectClient extends EventEmitter {
 
         req.on('error', (e) => {
             console.error(`problem with request: ${e.message}`);
-            setTimeout(self._init.bind(self), 1000); // Retry after a second
+            self._initTimeout = setTimeout(self._init.bind(self), 1000); // Retry after a second
         });
         req.write(postData);
         req.end();
