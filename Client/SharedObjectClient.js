@@ -1,6 +1,5 @@
 "use strict";
 
-const assert = require("assert");
 const http = require("http");
 const EventEmitter = require("events").EventEmitter;
 const deepDiff = require("deep-diff");
@@ -19,6 +18,9 @@ class SharedObjectClient extends EventEmitter {
         this.endpoint = endpoint;
         this.initTransport = transports.rpc;
         this.updateTransport = transports.source;
+        // Delay before fetching full state after subscribe. ZMQ subscriptions take
+        // time to propagate to the server, so we wait to allow queued diffs to arrive
+        // first. If too short, we may miss early diffs and end up with version gaps.
         this._initDelay = options.initDelay ?? 100;
 
         // Connection and subscription state
@@ -117,6 +119,12 @@ class SharedObjectClient extends EventEmitter {
         let ptr = this.firstChange;
 
         while (ptr) {
+            // Version gap in queued messages - can happen if initDelay was too short
+            // and we missed early diffs. Reinit to recover.
+            if (ptr.v !== this._v + 1) {
+                console.error(new Date(), "(" + this.endpoint.name + ") Version gap in queued message! Expected v=" + (this._v + 1) + ", got v=" + ptr.v + ". Reinit.");
+                return this._init();
+            }
 
             // Diffs are already reversed by Server!
             let diffs = ptr.diffs;
@@ -130,11 +138,6 @@ class SharedObjectClient extends EventEmitter {
             this.timeSum += now - new Date(ptr.now);
             this.timeCount++;
 
-            if (ptr.v !== this._v + 1) {
-                console.error(JSON.stringify(diffs,))
-            }
-
-            assert(ptr.v === this._v + 1, `(${this.endpoint.name}) SO Version mismatch: expected ptr.v=${this._v + 1}, got ptr.v=${ptr.v} (current this._v=${this._v})`);
             this._v++;
 
             ptr = ptr.next;
