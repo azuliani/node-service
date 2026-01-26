@@ -15,18 +15,15 @@ class SharedObjectService{
         this._lastTransmit = fastcopy(initial);
         this._v = 0;
         this.endpoint = endpoint;
-        transports.rpc.on('message', this._processRPC.bind(this));
         this.diffTransport = transports.source;
         this.stats = {updates: 0};
     }
 
-    _processRPC(message, reply){
-        if (message.endpoint === "_SO_" + this.endpoint.name){
-            if (message.input === "init"){
-                reply({err:null, res:{data: this.data, v: this._v}});
-            }else{
-                throw "Got bad data on RPC channel";
-            }
+    call(data, callback) {
+        if (data.input === "init") {
+            callback(JSON.stringify({err: null, res: {data: this.data, v: this._v}}));
+        } else {
+            callback(JSON.stringify({err: `Unknown command: ${data.input}`}));
         }
     }
 

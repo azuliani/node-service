@@ -1,6 +1,5 @@
 "use strict";
 
-const http = require("http");
 const EventEmitter = require("events").EventEmitter;
 const deepDiff = require("deep-diff");
 const parseDiffDates = require("../misc/Validation").parseDiffDates;
@@ -27,6 +26,7 @@ class SharedObjectClient extends EventEmitter {
         this._connected = false;
         this._subscribed = false;
         this._initTimeout = null;  // Tracks pending init/retry timeouts
+        this._initInFlight = false;
 
         // Listen to events emitted by parent Client
         this.on('connected', () => { this._connected = true; });
@@ -212,72 +212,63 @@ class SharedObjectClient extends EventEmitter {
     }
 
     _init() {
-        // Don't re-init if user has unsubscribed
-        if (!this._subscribed) {
-            return;
-        }
+        if (!this._subscribed || this._initInFlight) return;
 
+        this._initInFlight = true;
         this._prepareForInit();
 
-        const postData = JSON.stringify({
-            endpoint: "_SO_" + this.endpoint.name,
-            input: "init"
-        });
-        const options = {
-            hostname: this.initTransport.hostname,
-            port: this.initTransport.port,
-            path: '/',
+        fetch(`http://${this.initTransport.hostname}:${this.initTransport.port}/`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                endpoint: `_SO_${this.endpoint.name}`,
+                input: "init"
+            }),
+            signal: AbortSignal.timeout(10000)
+        })
+        .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .then((answer) => {
+            if (!this._subscribed) return;
+
+            parseFullDates(this.endpoint, answer.res.data);
+            this.data = answer.res.data;
+            this._v = answer.res.v;
+
+            let ptr = this.firstChange;
+            let skipped = 0;
+            while (ptr && ptr.v <= answer.res.v) {
+                ptr = ptr.next;
+                skipped++;
             }
-        };
 
-        const self = this;
-        const req = http.request(options, (reply) => {
-            let body = "";
-            reply.on('data', (data) => {
-                body += data;
-            });
-            reply.on('end', () => {
-                    const answer = JSON.parse(body);
+            this.firstChange = ptr || null;
+            this.lastChange = null;
+            this.outstandingDiffs = 0;
 
-                    parseFullDates(this.endpoint, answer.res.data);
-                    this.data = answer.res.data;
-                    this._v = answer.res.v;
+            while (ptr) {
+                this.outstandingDiffs++;
+                this.lastChange = ptr;
+                ptr = ptr.next;
+            }
 
-                    let ptr = this.firstChange;
-                    let skipped = 0;
-                    while (ptr && ptr.v <= answer.res.v) {
-                        ptr = ptr.next;
-                        skipped++;
-                    }
+            console.error(`${new Date()} (${this.endpoint.name}) Init installed version ${answer.res.v}. Skipped ${skipped} past changes. Have ${this.outstandingDiffs} outstanding changes.`);
 
-                    this.firstChange = ptr || null;
-                    this.lastChange = null;
-                    this.outstandingDiffs = 0;
-
-                    while (ptr) {
-                        this.outstandingDiffs++;
-                        this.lastChange = ptr;
-                        ptr = ptr.next;
-                    }
-
-                    console.error(`${new Date()} (${this.endpoint.name}) Init installed version ${answer.res.v}. Skipped ${skipped} past changes. Have ${this.outstandingDiffs} outstanding changes.`);
-
-                    this.ready = true;
-                    this._tryApply();
-                    this.emit('init', {v: answer.res.v, data: answer.res.data});
-            });
+            this.ready = true;
+            this._tryApply();
+            this.emit('init', {v: answer.res.v, data: answer.res.data});
+        })
+        .catch((err) => {
+            console.error(`(${this.endpoint.name}) Init failed: ${err.message}`);
+            if (this._subscribed) {
+                this._initTimeout = setTimeout(() => this._init(), 1000);
+            }
+        })
+        .finally(() => {
+            this._initInFlight = false;
         });
-
-        req.on('error', (e) => {
-            console.error(`problem with request: ${e.message}`);
-            self._initTimeout = setTimeout(self._init.bind(self), 1000); // Retry after a second
-        });
-        req.write(postData);
-        req.end();
     }
 }
 

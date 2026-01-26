@@ -100,17 +100,16 @@ class Service {
             });
             const self = this;
             req.on('end', function () {
-                res.writeHead(200, {'Content-Type': 'application/json'});
                 const parsedReq = JSON.parse(body);
                 const handler = self.RPCServices[parsedReq.endpoint];
-                if (handler) { // Could be SharedObject, has a different callback
+                if (handler) {
                     handler.call(parsedReq, (result) => {
+                        res.writeHead(200, {'Content-Type': 'application/json'});
                         res.end(result);
                     });
-                }else{
-                    self.transports.rpc.emit("message", parsedReq, (result)=>{
-                        res.end(JSON.stringify(result));
-                    })
+                } else {
+                    res.writeHead(404, {'Content-Type': 'application/json'});
+                    res.end(JSON.stringify({err: `Unknown endpoint: ${parsedReq.endpoint}`}));
                 }
             });
         }
@@ -118,7 +117,6 @@ class Service {
             res.writeHead(200, {'Content-Type': 'text/html'});
             res.end("-");
         }
-
     }
 
     _setupPushPull(hostname) {
@@ -144,6 +142,7 @@ class Service {
                     break;
                 case 'SharedObject':
                     this[endpoint.name] = new SharedObjectService(endpoint, this.transports, this.initials[endpoint.name]);
+                    this.RPCServices["_SO_" + endpoint.name] = this[endpoint.name];
                     break;
                 case 'PushPull':
                     this[endpoint.name] = new PushService(endpoint, this.transports);
