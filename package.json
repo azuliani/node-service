@@ -8,6 +8,9 @@
   },
   "author": "Alexander Zuliani",
   "license": "MIT",
+  "overrides": {
+    "lodash": ">=4.17.23"
+  },
   "dependencies": {
     "deep-diff": "github:azuliani/deep-diff",
     "fast-copy": "^3.0.2",
