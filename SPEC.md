@@ -185,6 +185,16 @@ client.MySharedObject.data;
 client.close(): void  // Stops heartbeat checking, closes all sockets
 ```
 
+### Descriptor Validation
+On first connection, the client should validate that its descriptor is compatible with the server's. This prevents silent failures from mismatched endpoint configurations.
+
+**Mechanism:**
+- Server exposes a `_descriptor` RPC endpoint that returns the descriptor hash
+- Client computes hash of its descriptor and compares on connect
+- Mismatch throws `DescriptorMismatchError`
+
+Note: This is a new feature for the rewrite. The current implementation does not validate descriptors.
+
 ## 6. RPC Pattern
 
 Request/response pattern using HTTP POST.
@@ -332,7 +342,7 @@ notify(hint?: string[], dirtyBypass?: boolean): void
 
 **Parameters:**
 - `hint` - Property path to optimize diff computation (e.g., `['players', 'player1']`)
-- `dirtyBypass` - If true, skips deep-diff and sends the entire hinted subtree as a replacement
+- `dirtyBypass` - If true, skips deep-diff and sends the entire hinted subtree as a replacement. Emits a single diff: `{ kind: 'N', path: hint, lhs: undefined, rhs: currentValue }`
 
 **Behavior:**
 1. Validates current `data` against `objectSchema`
@@ -469,7 +479,9 @@ Note: Current implementation uses custom `type: "date"`. Rewrite should use stan
 - **SharedObject:** Full object validated on server, diffs have dates parsed on client
 
 ### Validation Errors
-Validation failures throw an Error with message `"Validation failed! {details}"`.
+Validation failures throw synchronously. Server-side `send()` and `notify()` calls throw immediately if validation fails.
+
+Error message format: `"Validation failed! {details}"`
 
 ## 13. Error Types
 
@@ -477,21 +489,48 @@ The rewrite should define structured error classes:
 
 ```typescript
 class ValidationError extends Error {
-  constructor(message: string, details: ValidationDetails);
+  readonly name = "ValidationError";
+  readonly code = "VALIDATION_FAILED";
 }
 
 class TimeoutError extends Error {
-  constructor(message: string, timeoutMs: number);
+  readonly name = "TimeoutError";
+  readonly code = "TIMEOUT";
 }
 
 class ConnectionError extends Error {
-  constructor(message: string, address: string);
+  readonly name = "ConnectionError";
+  readonly code = "CONNECTION_FAILED";
 }
 
 class VersionMismatchError extends Error {
-  constructor(message: string, expected: number, received: number);
+  readonly name = "VersionMismatchError";
+  readonly code = "VERSION_MISMATCH";
+}
+
+class DescriptorMismatchError extends Error {
+  readonly name = "DescriptorMismatchError";
+  readonly code = "DESCRIPTOR_MISMATCH";
 }
 ```
+
+### Error Serialization (RPC)
+
+Errors transmitted over RPC are serialized as:
+```typescript
+interface SerializedError {
+  message: string;
+  name: string;
+  code?: string;
+}
+```
+
+Example:
+```typescript
+{ message: "Request timed out", name: "TimeoutError", code: "TIMEOUT" }
+```
+
+Note: The current implementation uses plain strings for errors. The rewrite uses structured serialization for programmatic error handling.
 
 ## 14. Wire Formats
 
@@ -539,7 +578,7 @@ HTTP POST body:
 HTTP response body:
 ```typescript
 {
-  err: any | null,
+  err: SerializedError | null,
   res: R | undefined
 }
 ```
@@ -578,29 +617,27 @@ type Diff =
 - **Client:** ZMQ PUSH socket, connects to address
 
 ### RPC (HTTP)
-- **Server:** HTTP server listening on port
-- **Client:** HTTP POST requests
+- **Server:** HTTP server listening on port from `rpc.server` URL
+- **Client:** HTTP POST requests to `rpc.client` URL
+- **Path:** `/` (single path, endpoint specified in request body)
 - **Content-Type:** application/json
+- **Response Codes:**
+  - `200` - Success (result in body, check `err` field for application errors)
+  - `404` - Unknown endpoint
+  - `405` - Method not allowed (non-POST requests)
 
 ### PushPull (PUSH/PULL - One to Many)
 - **Server:** ZMQ PUSH socket, binds to address
 - **Client:** ZMQ PULL socket, connects to address
 
-## 17. Statistics
+### ZMQ Send Behavior
+Send operations follow standard ZMQ semantics:
+- **PUB sockets:** Messages are dropped if no subscribers are connected
+- **PUSH sockets:** Messages are queued until a peer connects (subject to high water mark)
 
-All endpoints (except Client-side RPC and Source) have:
+The library does not provide additional error handling for these cases.
 
-```typescript
-getStats(): { updates: number }
-```
-
-**Behavior:**
-- Returns the current count of messages sent/received
-- Resets the counter to 0 after returning
-
-This enables periodic monitoring by calling `getStats()` at regular intervals.
-
-## 18. Test Helpers
+## 17. Test Helpers
 
 The library should export test utilities:
 
@@ -645,7 +682,7 @@ Proper cleanup sequence:
 4. `server.close()`
 5. `await delay(50)` - Let sockets fully close
 
-## 19. Implementation Notes
+## 18. Implementation Notes
 
 ### Internal Endpoint Naming
 SharedObject endpoints are prefixed internally:
@@ -657,11 +694,12 @@ All clients automatically subscribe to the `_heartbeat` topic on the source tran
 
 ### MonitoredSocket
 The client uses a MonitoredSocket wrapper around ZMQ sockets that:
-- Emits `'connected'` and `'disconnected'` events
-- Monitors socket state changes
+- Uses ZMQ's socket monitor API to observe connection state
+- Maps ZMQ events: `'connect'` → `'connected'`, `'disconnect'` → `'disconnected'`
+- On monitor error, restarts monitoring after 5000ms
 
 ### Fast-copy Usage
 The server uses fast-copy for deep cloning state snapshots to avoid mutation issues during diff computation.
 
 ### Sliced Cache (Performance Optimization)
-SharedObjectClient uses a tinycache instance to cache computed date paths for diff processing, with 10-second TTL.
+SharedObjectClient uses a tinycache instance to cache computed date paths for diff processing, with 10000ms TTL.
