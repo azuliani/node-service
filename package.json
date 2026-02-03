@@ -4,7 +4,8 @@
   "description": "Todo",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "bench:nested": "node benchmark/nested-subobjects.js"
   },
   "author": "Alexander Zuliani",
   "license": "MIT",
@@ -12,7 +13,7 @@
     "lodash": ">=4.17.23"
   },
   "dependencies": {
-    "deep-diff": "github:azuliani/deep-diff",
+    "@azuliani/deep-diff": "0.0.1",
     "fast-copy": "^3.0.2",
     "json.date-extensions": "^1.2.2",
     "schema-inspector": "^2.1.0",

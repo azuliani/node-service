@@ -3,7 +3,7 @@
 const assert = require("assert");
 const fastcopy = require("fast-copy").default;
 const doValidate = require("../misc/Validation").SharedObjectValidation;
-const deepDiff = require("deep-diff");
+const deepDiff = require("@azuliani/deep-diff");
 
 class SharedObjectService{
     constructor(endpoint, transports, initial){

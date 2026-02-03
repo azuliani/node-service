@@ -1,7 +1,7 @@
 "use strict";
 
 const EventEmitter = require("events").EventEmitter;
-const deepDiff = require("deep-diff");
+const deepDiff = require("@azuliani/deep-diff");
 const parseDiffDates = require("../misc/Validation").parseDiffDates;
 const parseFullDates = require("../misc/Validation").parseFullDates;
 
