@@ -5,13 +5,13 @@ Node.js library for building services with ZeroMQ-based messaging patterns. Prov
 ## Installation
 
 ```bash
-npm install node-service
+npm install @azuliani/node-service
 ```
 
 ## Quick Start
 
 ```javascript
-const { Service, Client } = require('node-service');
+const { Service, Client } = require('@azuliani/node-service');
 
 // Define a descriptor
 const descriptor = {

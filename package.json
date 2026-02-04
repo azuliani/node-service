@@ -1,5 +1,5 @@
 {
-  "name": "node-service",
+  "name": "@azuliani/node-service",
   "version": "0.0.1",
   "description": "Node.js library for building services with ZeroMQ-based messaging patterns",
   "main": "index.js",
