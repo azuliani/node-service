@@ -1,12 +1,26 @@
 {
   "name": "node-service",
-  "version": "0.1.0",
-  "description": "Todo",
+  "version": "0.0.1",
+  "description": "Node.js library for building services with ZeroMQ-based messaging patterns",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "Client/",
+    "Service/",
+    "misc/"
+  ],
   "scripts": {
     "test": "node --test test/*.test.js",
     "bench:nested": "node benchmark/nested-subobjects.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azuliani/node-service.git"
+  },
+  "bugs": {
+    "url": "https://github.com/azuliani/node-service/issues"
+  },
+  "homepage": "https://github.com/azuliani/node-service#readme",
   "author": "Alexander Zuliani",
   "license": "MIT",
   "overrides": {
@@ -15,7 +29,6 @@
   "dependencies": {
     "@azuliani/deep-diff": "0.0.1",
     "fast-copy": "^3.0.2",
-    "json.date-extensions": "^1.2.2",
     "schema-inspector": "^2.1.0",
     "tinycache": "^1.1.2",
     "zeromq": "^6.1.2"
