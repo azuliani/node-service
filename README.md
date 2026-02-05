@@ -11,7 +11,7 @@ For the full specification, see [SPEC.md](./SPEC.md). For intentional spec/impl 
 
 ## Install
 
-Requires **Node.js >= 23.6.0** (ESM-only package).
+Requires **Node.js >= 23.6.0**.
 
 ```bash
 npm install node-service
@@ -61,6 +61,14 @@ console.log(res.message);
 
 client.close();
 await service.close();
+```
+
+### CommonJS
+
+This package ships both ESM and CommonJS entrypoints. In CommonJS, use `require()`:
+
+```js
+const { Client, Service } = require('node-service');
 ```
 
 ## Patterns
@@ -165,7 +173,7 @@ node examples/rpc-basic.ts
 node examples/sharedobject-basic.ts
 ```
 
-CommonJS usage is shown in `examples/*.cjs` (uses dynamic `import()`).
+CommonJS usage is shown in `examples/*.cjs`.
 
 ## Debug logging
 
@@ -182,4 +190,3 @@ The previous ZeroMQ-based implementation is preserved on branch `old` (and tag `
 ## License
 
 MIT (see [LICENSE](./LICENSE)).
-
