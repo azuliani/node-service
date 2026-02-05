@@ -2,7 +2,7 @@
  * Basic SharedObject Example
  *
  * Demonstrates state synchronization between a Service and Client.
- * The server owns the state and broadcasts diffs to subscribed clients.
+ * The server owns the state and broadcasts deltas to subscribed clients.
  *
  * Run with: node examples/sharedobject-basic.ts
  */
@@ -57,8 +57,8 @@ async function main() {
   console.log('[Client] Created');
 
   // Listen for updates
-  client.SO('Counter').on('update', (diffs: Diff[]) => {
-    console.log('[Client] Received update:', JSON.stringify(diffs, null, 2));
+  client.SO('Counter').on('update', (delta: Diff) => {
+    console.log('[Client] Received update:', JSON.stringify(delta, null, 2));
     console.log('[Client] Current state:', JSON.stringify(client.SO('Counter').data, null, 2));
   });
 

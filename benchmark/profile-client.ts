@@ -254,14 +254,14 @@ async function profileUpdateProcessing(iterations: number, stateSize: number) {
   console.log('\nClient-side operation breakdown (isolated):');
 
   const { compileSchema } = await import('../src/validation.ts');
-  const { applyChange } = await import('deep-diff');
+  const { apply } = await import('@azuliani/tree-diff');
 
   const validator = compileSchema(descriptor.endpoints[0]!.objectSchema);
 
   // Simulate update message
   const updateMessage = JSON.stringify({
     type: 'update',
-    diffs: [{ kind: 'E', path: ['target'], lhs: 0, rhs: 1 }],
+    delta: [['target', 'E', 1]],
     v: 1,
     now: new Date().toISOString()
   });
@@ -282,9 +282,7 @@ async function profileUpdateProcessing(iterations: number, stateSize: number) {
 
     // Diff application
     start = process.hrtime.bigint();
-    for (const diff of parsed.diffs) {
-      applyChange(testData, null, diff);
-    }
+    apply(testData, parsed.delta);
     end = process.hrtime.bigint();
     isolatedTimings.diffApplication.push(Number(end - start) / 1000);
 

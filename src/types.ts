@@ -2,14 +2,14 @@
  * Core type definitions for the messaging library.
  */
 
-import type { AnyDiff } from '@azuliani/deep-diff';
+import type { TreeDelta } from '@azuliani/tree-diff';
 import type { ClientTransport } from './transports/ClientTransport.ts';
 import type { ServerTransport } from './transports/ServerTransport.ts';
 
 /**
- * Diff format from deep-diff library.
+ * SharedObject delta format from `@azuliani/tree-diff`.
  */
-export type Diff = AnyDiff;
+export type Diff = TreeDelta;
 
 /**
  * JSON Schema definition (subset relevant for this library)

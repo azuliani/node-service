@@ -120,7 +120,7 @@ export function auditLogPlugin(): ServicePlugin {
               break;
             }
             const src = service.getEndpoint<PubSubEndpoint>(endpoint.name);
-            const original = (src as any).send as Function;
+            const original = (src as any).send as (message: unknown) => unknown;
             if (!(original as any)[WRAPPED]) {
               const wrapped = function (this: PubSubEndpoint, message: unknown) {
                 emit({ type: 'pubsub', endpoint: endpoint.name, at: new Date().toISOString() });
@@ -133,7 +133,7 @@ export function auditLogPlugin(): ServicePlugin {
           }
           case 'PushPull': {
             const pushpull = service.getEndpoint<PushPullEndpoint>(endpoint.name);
-            const original = (pushpull as any).push as Function;
+            const original = (pushpull as any).push as (message: unknown) => boolean;
             if (!(original as any)[WRAPPED]) {
               const wrapped = function (this: PushPullEndpoint, message: unknown) {
                 const ok = original.call(this, message) as boolean;
@@ -152,7 +152,7 @@ export function auditLogPlugin(): ServicePlugin {
           }
           case 'SharedObject': {
             const shared = service.getEndpoint<SharedObjectEndpoint>(endpoint.name);
-            const original = (shared as any).notify as Function;
+            const original = (shared as any).notify as (hint?: string[]) => unknown;
             if (!(original as any)[WRAPPED]) {
               const wrapped = function (this: SharedObjectEndpoint, hint?: string[]) {
                 emit({ type: 'sharedobject', endpoint: endpoint.name, at: new Date().toISOString() });

@@ -3,7 +3,7 @@
 WebSocket-based messaging library for Node.js with `Service`/`Client` abstractions.
 
 - Single WebSocket connection per client (muxed frames)
-- Patterns: **RPC**, **PubSub**, **SharedObject** (diff-based state sync)
+- Patterns: **RPC**, **PubSub**, **SharedObject** (delta-based state sync)
 - JSON Schema validation with automatic `Date` serialization/parsing (`format: "date"` / `"date-time"`)
 - Heartbeats + reconnect support
 
@@ -82,7 +82,7 @@ All patterns share one WebSocket per client at `ws://{descriptor.transport.clien
 
 ### SharedObject
 
-SharedObject state lives on the server; clients receive an `init` snapshot, then `update` diffs.
+SharedObject state lives on the server; clients receive an `init` snapshot, then `update` deltas.
 
 ```ts
 import { Client, Service } from '@azuliani/node-service';

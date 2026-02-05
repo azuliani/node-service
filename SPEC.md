@@ -38,7 +38,7 @@ All patterns use a single WebSocket server on one port (single connection per cl
 |---------|--------|--------|----------|
 | RPC | WS request/response | WS request/response | Request/response |
 | PubSub | WS broadcast | WS receive | Pub/sub |
-| SharedObject | WS broadcast | WS receive | State sync via diffs |
+| SharedObject | WS broadcast | WS receive | State sync via deltas |
 
 ## 2. Technical Stack
 
@@ -48,7 +48,7 @@ All patterns use a single WebSocket server on one port (single connection per cl
 - **uWebSockets.js** for server WebSocket
 - **ws** package for client WebSocket
 - **TypeBox 1.0** (`typebox`, not `@sinclair/typebox`) for validation
-- **deep-diff** from `github:azuliani/deep-diff#v2`
+- **@azuliani/tree-diff** for JSON-safe deltas + strict patching
 - **fast-copy** for state snapshots
 
 ### TypeBox 1.0 API
@@ -267,7 +267,7 @@ Events: `'message'`, `'connected'`, `'disconnected'`
 
 ## 9. SharedObject Pattern (State Sync)
 
-Synchronized state via diffs over WebSocket.
+Synchronized state via deltas over WebSocket.
 
 ### Service
 ```typescript
@@ -276,9 +276,9 @@ rawData: T                                 // Direct access without proxy overhe
 notify(hint?: string[]): void
 ```
 
-- `hint` - Property path to optimize diff (e.g., `['players', 'player1']`)
+- `hint` - Property path to optimize delta computation (e.g., `['players', 'player1']`)
 
-Validates `data`, computes diffs, increments version, broadcasts.
+Validates `data`, computes a delta, increments version, broadcasts.
 
 ### Auto-Notify Option
 
@@ -337,7 +337,7 @@ On disconnect:
 3. Flush local state
 4. Auto-reconnect if was subscribed
 
-No synthetic diffs are emitted on disconnect. Clients must react to `'disconnected'` and clear any derived/UI state as needed.
+No synthetic deltas are emitted on disconnect. Clients must react to `'disconnected'` and clear any derived/UI state as needed.
 
 ### Wire Format
 ```typescript
@@ -345,19 +345,29 @@ No synthetic diffs are emitted on disconnect. Clients must react to `'disconnect
 { type: 'init', data: T, v: number }
 
 // Update
-{ type: 'update', diffs: Diff[], v: number, now: string }
+{ type: 'update', delta: Diff, v: number, now: string }
 ```
 
 ### Diff Format
 ```typescript
-type Diff =
-  | { kind: 'N'; path: (string | number)[]; rhs: any; $dates?: PropertyPath[] }
-  | { kind: 'D'; path: (string | number)[]; lhs: any; $dates?: PropertyPath[] }
-  | { kind: 'E'; path: (string | number)[]; lhs: any; rhs: any; $dates?: PropertyPath[] }
-  | { kind: 'A'; path: (string | number)[]; index: number; item: Diff; $dates?: PropertyPath[] }
+type Key = string | number;
+type RelPath = Key[];
+
+type Meta = {
+  d?: RelPath[]; // Date paths within rhs (relative to rhs)
+  u?: RelPath[]; // undefined paths within rhs (relative to rhs)
+};
+
+type Leaf =
+  | [key: Key, kind: 'D']
+  | [key: Key, kind: 'N' | 'E', rhs: unknown, meta?: Meta];
+
+type Node = [path: Key[], entries: Entry[]];
+type Entry = Leaf | Node;
+type Diff = Entry[];
 ```
 
-The optional `$dates` property contains paths to Date values within `rhs`/`lhs` that were serialized as ISO strings. When present, `applyChange()` automatically restores these to Date objects.
+The optional `meta` contains paths to Date and explicit `undefined` values within `rhs` that were encoded as JSON-safe payloads. When present, `apply()` restores these back to their runtime values on the client.
 
 ## 10. Heartbeat System
 
@@ -404,7 +414,7 @@ Recursively traverse schema to find date formats:
 ### Validation Timing
 - **RPC:** Request validated on server (dates parsed), response validated both sides
 - **PubSub:** Validated server (no dates), validated client (dates parsed)
-- **SharedObject:** Full object validated server, diffs parsed client-side
+- **SharedObject:** Full object validated server, delta applied client-side
 
 Validation failures throw `ValidationError` synchronously.
 
@@ -516,7 +526,7 @@ Dependencies:
 - `uWebSockets.js`: `github:uNetworking/uWebSockets.js#v20.57.0`
 - `ws`: `^8.x`
 - `typebox`: `^1.x`
-- `deep-diff`: `github:azuliani/deep-diff#v2`
+- `@azuliani/tree-diff`: `^0.0.1`
 - `fast-copy`: `^3.x`
 - `debug`: `^4.x`
 
@@ -542,7 +552,7 @@ Dependencies:
 ### Performance Issues
 
 **High latency on SharedObject updates**
-- Use `hint` parameter to scope diff computation to changed subtree
+- Use `hint` parameter to scope delta computation to changed subtree
 - Batch synchronous mutations (they auto-batch within same tick via setImmediate)
 
 **Memory growth over time**
@@ -551,7 +561,7 @@ Dependencies:
 - Large SharedObject state is kept in memory on both server and client
 
 **High CPU during updates**
-- Avoid full-object diff on large state (use `hint` parameter)
+- Avoid full-object delta computation on large state (use `hint` parameter)
 - Validation runs on every notify - ensure schemas aren't overly complex
 
 ### Debugging
@@ -565,7 +575,7 @@ Specific debug namespaces:
 - `node-service:service` - Service lifecycle
 - `node-service:ws-server` - WebSocket server events
 - `node-service:ws-client` - WebSocket client events
-- `node-service:sharedobject-endpoint` - SharedObject diffs and broadcasts
+- `node-service:sharedobject-endpoint` - SharedObject deltas and broadcasts
 
 **Common error codes**
 - `VALIDATION_FAILED` - Data doesn't match schema

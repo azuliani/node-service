@@ -8,6 +8,29 @@ import { Service, Client } from '../src/index.ts';
 import { createDescriptorAsync, getAvailablePort, delay, waitFor, waitUntil } from './helpers.ts';
 import type { Descriptor, SharedObjectEndpoint, Diff } from '../src/index.ts';
 
+function deltaTouchesKey(delta: Diff, key: string | number): boolean {
+  const stack: unknown[] = [...delta];
+
+  while (stack.length > 0) {
+    const entry = stack.pop() as any;
+    if (!entry) continue;
+
+    // Node: [path: Key[], entries: Entry[]]
+    if (Array.isArray(entry[0])) {
+      const path = entry[0] as unknown[];
+      if (path.includes(key)) return true;
+      const children = entry[1] as unknown[];
+      if (Array.isArray(children)) stack.push(...children);
+      continue;
+    }
+
+    // Leaf: [key, kind, ...]
+    if (entry[0] === key) return true;
+  }
+
+  return false;
+}
+
 describe('SharedObject Pattern', () => {
   describe('Basic state synchronization', () => {
     let service: Service;
@@ -59,8 +82,8 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should receive updates after notify', async () => {
-      const updates: Diff[][] = [];
-      client.SO('GameState').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('GameState').on('update', (delta: Diff) => updates.push(delta));
 
       // Modify server state and notify
       service.SO('GameState').data.score = 100;
@@ -135,8 +158,8 @@ describe('SharedObject Pattern', () => {
       client.SO('State').subscribe();
       await waitFor(client.SO('State'), 'init', 5000);
 
-      const updates: Diff[][] = [];
-      client.SO('State').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('State').on('update', (delta: Diff) => updates.push(delta));
 
       service.SO('State').data.items.push('first');
       service.SO('State').notify();
@@ -148,9 +171,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should detect nested object changes', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('State').removeAllListeners('update');
-      client.SO('State').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('State').on('update', (delta: Diff) => updates.push(delta));
 
       service.SO('State').data.nested.value = 42;
       service.SO('State').notify();
@@ -205,8 +228,8 @@ describe('SharedObject Pattern', () => {
       client.SO('Data').subscribe();
       await waitFor(client.SO('Data'), 'init', 5000);
 
-      const updates: Diff[][] = [];
-      client.SO('Data').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('Data').on('update', (delta: Diff) => updates.push(delta));
 
       // Only change 'a', hint to only check 'a'
       service.SO('Data').data.a = 10;
@@ -215,10 +238,7 @@ describe('SharedObject Pattern', () => {
       await delay(100);
 
       assert.strictEqual(updates.length, 1);
-      // Diff path should include the hint path
-      const diff = updates[0]?.[0];
-      assert.ok(diff);
-      assert.ok(diff.path?.includes('a'));
+      assert.ok(deltaTouchesKey(updates[0]!, 'a'));
       assert.strictEqual(client.SO('Data').data?.a, 10);
     });
   });
@@ -408,8 +428,8 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should allow notify() with hint on nested date objects', async () => {
-      const updates: Diff[][] = [];
-      client.SO('NestedDates').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('NestedDates').on('update', (delta: Diff) => updates.push(delta));
 
       const newDate = new Date('2024-08-01T00:00:00.000Z');
       service.SO('NestedDates').data.meta.updatedAt = newDate;
@@ -428,9 +448,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should auto-notify on nested date changes', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('NestedDates').removeAllListeners('update');
-      client.SO('NestedDates').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('NestedDates').on('update', (delta: Diff) => updates.push(delta));
 
       const newDate = new Date('2024-09-01T00:00:00.000Z');
       service.SO('NestedDates').data.meta.updatedAt = newDate;
@@ -724,8 +744,8 @@ describe('SharedObject Pattern', () => {
       client.SO('AutoDetect').subscribe();
       await waitFor(client.SO('AutoDetect'), 'init', 5000);
 
-      const updates: Diff[][] = [];
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Change property without manual notify()
       service.SO('AutoDetect').data.count = 42;
@@ -738,9 +758,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should auto-notify on nested property change', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Change nested property
       service.SO('AutoDetect').data.nested.value = 100;
@@ -752,9 +772,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should batch multiple synchronous changes into one notification', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Make multiple changes synchronously
       service.SO('AutoDetect').data.count = 1;
@@ -771,9 +791,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should merge overlapping paths (parent subsumes child)', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Change both parent and child paths
       service.SO('AutoDetect').data.nested.deep.x = 999;
@@ -788,9 +808,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should handle array push', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       service.SO('AutoDetect').data.items.push(1, 2, 3);
 
@@ -801,9 +821,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should handle array pop', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       const popped = service.SO('AutoDetect').data.items.pop();
 
@@ -815,9 +835,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should handle array splice', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       service.SO('AutoDetect').data.items.splice(1, 0, 99);
 
@@ -827,10 +847,10 @@ describe('SharedObject Pattern', () => {
       assert.deepStrictEqual(client.SO('AutoDetect').data?.items, [1, 99, 2]);
     });
 
-    it('should apply multi-delete array diffs in correct order', async () => {
-      const updates: Diff[][] = [];
+    it('should apply multi-delete array deltas correctly', async () => {
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Reset array to known state
       service.SO('AutoDetect').data.items = [1, 2, 3, 4, 5];
@@ -845,15 +865,12 @@ describe('SharedObject Pattern', () => {
 
       assert.strictEqual(updates.length, 1, 'Should receive one update for multi-delete');
       assert.deepStrictEqual(client.SO('AutoDetect').data?.items, [1, 2, 5]);
-
-      const arrayDiffs = updates[0].filter((diff) => diff.kind === 'A');
-      assert.ok(arrayDiffs.length >= 2, 'Should include multiple array diffs');
     });
 
     it('should handle property deletion', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       delete (service.SO('AutoDetect').data as any).name;
 
@@ -864,9 +881,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should handle object replacement', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       service.SO('AutoDetect').data.nested = { value: 999, deep: { x: 888 } };
 
@@ -878,9 +895,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should work alongside manual notify() calls', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('AutoDetect').removeAllListeners('update');
-      client.SO('AutoDetect').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('AutoDetect').on('update', (delta: Diff) => updates.push(delta));
 
       // Auto-detected change
       service.SO('AutoDetect').data.count = 500;
@@ -945,8 +962,8 @@ describe('SharedObject Pattern', () => {
       client.SO('ManualNotify').subscribe();
       await waitFor(client.SO('ManualNotify'), 'init', 5000);
 
-      const updates: Diff[][] = [];
-      client.SO('ManualNotify').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('ManualNotify').on('update', (delta: Diff) => updates.push(delta));
 
       // Change property - should NOT trigger automatic notification
       service.SO('ManualNotify').data.count = 42;
@@ -960,9 +977,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should notify only when notify() is called manually', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('ManualNotify').removeAllListeners('update');
-      client.SO('ManualNotify').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('ManualNotify').on('update', (delta: Diff) => updates.push(delta));
 
       // Make multiple changes
       service.SO('ManualNotify').data.count = 100;
@@ -983,9 +1000,9 @@ describe('SharedObject Pattern', () => {
     });
 
     it('should work with hint in manual mode', async () => {
-      const updates: Diff[][] = [];
+      const updates: Diff[] = [];
       client.SO('ManualNotify').removeAllListeners('update');
-      client.SO('ManualNotify').on('update', (diffs: Diff[]) => updates.push(diffs));
+      client.SO('ManualNotify').on('update', (delta: Diff) => updates.push(delta));
 
       // Change and notify with hint
       service.SO('ManualNotify').data.count = 200;
@@ -1047,8 +1064,8 @@ describe('SharedObject Pattern', () => {
       assert.strictEqual(client.SO('DisconnectTest').data?.a, 1);
       assert.strictEqual(client.SO('DisconnectTest').data?.b, 2);
 
-      const deletionDiffs: Diff[][] = [];
-      client.SO('DisconnectTest').on('update', (diffs: Diff[]) => deletionDiffs.push(diffs));
+      const deletionDeltas: Diff[] = [];
+      client.SO('DisconnectTest').on('update', (delta: Diff) => deletionDeltas.push(delta));
 
       // Close server
       await service.close();
@@ -1058,7 +1075,7 @@ describe('SharedObject Pattern', () => {
 
       // SharedObjects are inaccessible when non-ready; clients should react to
       // the disconnect signal rather than relying on synthetic deletion diffs.
-      assert.strictEqual(deletionDiffs.length, 0, 'Should not receive update diffs on disconnect');
+      assert.strictEqual(deletionDeltas.length, 0, 'Should not receive update deltas on disconnect');
 
       // Client state should be reset
       assert.strictEqual(client.SO('DisconnectTest').ready, false);

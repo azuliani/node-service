@@ -2,7 +2,7 @@
  * Basic SharedObject Example (CommonJS)
  *
  * Demonstrates state synchronization between a Service and Client.
- * The server owns the state and broadcasts diffs to subscribed clients.
+ * The server owns the state and broadcasts deltas to subscribed clients.
  * Uses dynamic import() to load the ESM package from CommonJS.
  *
  * Run with: node examples/sharedobject-basic.cjs
@@ -64,8 +64,8 @@ async function main() {
   console.log('[Client] Subscribed to Counter');
 
   // Listen for updates
-  client.SO('Counter').on('update', (diffs) => {
-    console.log('[Client] Received update:', JSON.stringify(diffs, null, 2));
+  client.SO('Counter').on('update', (delta) => {
+    console.log('[Client] Received update:', JSON.stringify(delta, null, 2));
     console.log('[Client] Current state:', JSON.stringify(client.SO('Counter').data, null, 2));
   });
 

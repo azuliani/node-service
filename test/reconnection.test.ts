@@ -132,8 +132,8 @@ describe('Reconnection Behavior', () => {
       await waitFor(client.SO('GameState'), 'init', 5000);
 
       // Track updates
-      const updates: Diff[][] = [];
-      client.SO('GameState').on('update', (diffs: Diff[]) => updates.push(diffs));
+      const updates: Diff[] = [];
+      client.SO('GameState').on('update', (delta: Diff) => updates.push(delta));
 
       // Server makes changes
       service.SO('GameState').data.players.alice.score = 200;

@@ -67,7 +67,7 @@
   "license": "MIT",
   "dependencies": {
     "debug": "^4.4.0",
-    "@azuliani/deep-diff": "^1.0.1",
+    "@azuliani/tree-diff": "^0.0.1",
     "fast-copy": "^3.0.2",
     "typebox": "^1.0.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.57.0",

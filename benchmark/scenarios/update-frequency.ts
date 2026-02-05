@@ -64,7 +64,7 @@ export async function run(
 
       let updatesReceived = 0;
 
-      client.SO('State').on('update', (_diffs: Diff[]) => {
+      client.SO('State').on('update', (_delta: Diff) => {
         updatesReceived++;
       });
 

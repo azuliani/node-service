@@ -1,12 +1,12 @@
 /**
  * Client-side SharedObject endpoint implementation.
  *
- * Maintains synchronized state with server using diffs over the mux connection.
+ * Maintains synchronized state with server using deltas over the mux connection.
  */
 
 import createDebug from 'debug';
 import { EventEmitter } from 'events';
-import { applyChange } from '@azuliani/deep-diff';
+import { apply } from '@azuliani/tree-diff';
 import { compileSchema } from '../../validation.ts';
 import { createReadOnlyProxy } from '../../proxy.ts';
 import type { CompiledValidator } from '../../validation.ts';
@@ -21,7 +21,7 @@ const debug = createDebug('node-service:sharedobject-client');
  */
 export interface SharedObjectClientEvents {
   init: [data: { v: number; data: unknown }];
-  update: [diffs: Diff[]];
+  update: [delta: Diff];
   connected: [];
   disconnected: [];
   error: [error: Error];
@@ -252,15 +252,18 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
   private _applyUpdate(update: SharedObjectUpdateFrame): void {
     if (!this._data) return;
 
-    // Apply diffs in reverse order to handle array deletions correctly.
-    for (let i = update.diffs.length - 1; i >= 0; i--) {
-      const diff = update.diffs[i];
-      if (!diff) continue;
-      try {
-        applyChange(this._data as Record<string, unknown>, null, diff);
-      } catch (err) {
-        debug('Error applying diff to %s: %o', this._name, err);
-      }
+    try {
+      apply(this._data as unknown as Record<string, unknown>, update.delta);
+    } catch (err) {
+      debug('Error applying delta to %s (v%d): %o', this._name, update.v, err);
+
+      // Treat patch failures as divergence: reset local state and request a fresh init.
+      this._handleDisconnectInternal();
+      this.emit('disconnected');
+
+      this._mux.resubscribe(this._name);
+      this._startInitTimeout();
+      return;
     }
 
     this._dataProxy = null; // Invalidate proxy.
@@ -272,8 +275,8 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
     const latency = now.getTime() - serverTime.getTime();
     this._latencies.push(latency);
 
-    debug('Applied %d diffs to %s (v%d)', update.diffs.length, this._name, this._v);
-    this.emit('update', update.diffs);
+    debug('Applied delta (%d entries) to %s (v%d)', update.delta.length, this._name, this._v);
+    this.emit('update', update.delta);
   }
 
   /**

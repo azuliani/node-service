@@ -59,7 +59,7 @@ export interface SharedObjectInitFrame {
 export interface SharedObjectUpdateFrame {
   endpoint: string;
   type: 'update';
-  diffs: Diff[];
+  delta: Diff;
   v: number;
   now: string;
 }

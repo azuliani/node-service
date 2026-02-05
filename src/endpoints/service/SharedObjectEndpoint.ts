@@ -1,11 +1,11 @@
 /**
  * Server-side SharedObject endpoint implementation.
  *
- * Maintains synchronized state between server and clients using diffs.
+ * Maintains synchronized state between server and clients using deltas.
  */
 
 import createDebug from 'debug';
-import { diff as computeDiff, applyDiff } from '@azuliani/deep-diff';
+import { diff as computeDelta, apply as applyDelta } from '@azuliani/tree-diff';
 import copy from 'fast-copy';
 import {
   compileSchema,
@@ -21,6 +21,22 @@ import type { MuxServer } from '../../mux/MuxServer.ts';
 import type { SharedObjectInitFrame, SharedObjectUpdateFrame } from '../../wire.ts';
 
 const debug = createDebug('node-service:sharedobject-endpoint');
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function isContainer(value: unknown): value is Record<string, unknown> | unknown[] {
+  return Array.isArray(value) || isPlainObject(value);
+}
+
+function sameContainerKind(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return true;
+  if (isPlainObject(a) && isPlainObject(b)) return true;
+  return false;
+}
 
 /**
  * Get value at path in object.
@@ -149,7 +165,7 @@ export class SharedObjectEndpoint<T extends object = object> {
       );
     }
 
-    let diffs: Diff[];
+    let delta: Diff | null;
 
     if (hint && hint.length > 0) {
       // OPTIMIZATION: Only validate the changed subtree
@@ -171,20 +187,7 @@ export class SharedObjectEndpoint<T extends object = object> {
         }
       }
 
-      // Compute diff only for the hinted subtree
-      const oldValue = getAtPath(this._lastSnapshot, hint);
-      const subtreeDiffs: Diff[] | undefined = computeDiff(oldValue, currentValue);
-
-      if (!subtreeDiffs || subtreeDiffs.length === 0) {
-        debug('No changes detected for %s (hint: %s)', this._name, hint.join('.'));
-        return;
-      }
-
-      // Prepend hint path to all diffs
-      diffs = subtreeDiffs.map((d: Diff) => ({
-        ...d,
-        path: [...hint, ...(d.path ?? [])],
-      }));
+      delta = this._computeDeltaForPath(hint);
     } else {
       // No hint: full validation and full diff
       // Note: serializeDates is needed here because TypeBox validates type: "string"
@@ -192,28 +195,27 @@ export class SharedObjectEndpoint<T extends object = object> {
       const serialized = serializeDates(this._data);
       this._validator.validate(serialized);
 
-      diffs = computeDiff(this._lastSnapshot, this._data) ?? [];
+      delta = this._computeDeltaForPath([]);
+    }
 
-      if (diffs.length === 0) {
-        debug('No changes detected for %s', this._name);
-        return;
-      }
+    if (!delta || delta.length === 0) {
+      debug('No changes detected for %s%s', this._name, hint && hint.length > 0 ? ` (hint: ${hint.join('.')})` : '');
+      return;
     }
 
     // Increment version
     this._version++;
 
-    debug('Broadcasting %d diffs for %s (v%d)', diffs.length, this._name, this._version);
+    debug('Broadcasting delta (%d entries) for %s (v%d)', delta.length, this._name, this._version);
 
-    // Update snapshot incrementally by applying diffs
-    // This is O(diff_size) instead of O(state_size)
-    applyDiff(this._lastSnapshot as Record<string, unknown>, diffs);
+    // Update snapshot incrementally by applying the delta
+    applyDelta(this._lastSnapshot as unknown as Record<string, unknown>, delta);
 
     // Broadcast to all connected clients
     const update: SharedObjectUpdateFrame = {
       endpoint: this._name,
       type: 'update',
-      diffs,
+      delta,
       v: this._version,
       now: new Date().toISOString(),
     };
@@ -251,13 +253,12 @@ export class SharedObjectEndpoint<T extends object = object> {
     const paths = this._pendingPaths.getPaths();
     this._pendingPaths.clear();
 
-    // 2. Collect all diffs
-    const allDiffs: Diff[] = [];
+    // 2. Collect all delta entries
+    const allDelta: Diff = [];
 
     for (const path of paths) {
       // 3a. Get current and snapshot values at path
       const currentValue = getAtPath(this._data, path);
-      const oldValue = getAtPath(this._lastSnapshot, path);
 
       // 3b. Validate subtree (skip for deleted properties - undefined values)
       if (path.length > 0 && currentValue !== undefined) {
@@ -296,28 +297,22 @@ export class SharedObjectEndpoint<T extends object = object> {
         this._validator.validate(serialized);
       }
 
-      // 3c. Compute diff for this subtree
-      const subtreeDiffs: Diff[] | undefined = computeDiff(oldValue, currentValue);
+      // 3c. Compute delta for this path
+      const pathDelta = this._computeDeltaForPath(path);
 
-      if (!subtreeDiffs || subtreeDiffs.length === 0) {
+      if (!pathDelta || pathDelta.length === 0) {
         continue; // No changes at this path
       }
 
-      // 3d. Prepend path to all diff paths
-      const prefixedDiffs = subtreeDiffs.map((d: Diff) => ({
-        ...d,
-        path: [...path, ...(d.path ?? [])],
-      }));
+      // 3d. Apply delta to snapshot IMMEDIATELY (before next path)
+      applyDelta(this._lastSnapshot as unknown as Record<string, unknown>, pathDelta);
 
-      // 3e. Apply diffs to snapshot IMMEDIATELY (before next path)
-      applyDiff(this._lastSnapshot as Record<string, unknown>, prefixedDiffs);
-
-      // 3f. Collect
-      allDiffs.push(...prefixedDiffs);
+      // 3e. Collect
+      allDelta.push(...pathDelta);
     }
 
-    // 4. If no diffs, nothing to broadcast
-    if (allDiffs.length === 0) {
+    // 4. If no delta entries, nothing to broadcast
+    if (allDelta.length === 0) {
       debug('No changes detected for %s (batched)', this._name);
       return;
     }
@@ -325,15 +320,76 @@ export class SharedObjectEndpoint<T extends object = object> {
     // 5. Increment version ONCE
     this._version++;
 
-    debug('Broadcasting %d diffs for %s (v%d, batched)', allDiffs.length, this._name, this._version);
+    debug(
+      'Broadcasting delta (%d entries) for %s (v%d, batched)',
+      allDelta.length,
+      this._name,
+      this._version
+    );
 
-    // 6. Broadcast ONE message with all diffs
+    // 6. Broadcast ONE message with the combined delta
     this._mux.broadcast(this._name, {
       endpoint: this._name,
       type: 'update',
-      diffs: allDiffs,
+      delta: allDelta,
       v: this._version,
       now: new Date().toISOString(),
     });
+  }
+
+  private _wrapDeltaAtPath(path: (string | number)[], entries: Diff): Diff {
+    if (path.length === 0) return entries;
+    // Tree-diff node paths must be non-empty and must point to an existing container.
+    return [[path, entries]] as unknown as Diff;
+  }
+
+  private _computeDeltaForPath(path: (string | number)[]): Diff | null {
+    // Root: diff entire state.
+    if (path.length === 0) {
+      if (!isContainer(this._lastSnapshot) || !isContainer(this._data) || !sameContainerKind(this._lastSnapshot, this._data)) {
+        throw new Error(`[node-service] SharedObject root must be a plain object or array for "${this._name}"`);
+      }
+      const rootDelta = computeDelta(this._lastSnapshot as unknown, this._data as unknown);
+      return rootDelta.length === 0 ? null : (rootDelta as unknown as Diff);
+    }
+
+    const oldValue = getAtPath(this._lastSnapshot, path);
+    const currentValue = getAtPath(this._data, path);
+
+    // If the changed path points at a container present in both snapshots, compute a nested delta.
+    if (isContainer(oldValue) && isContainer(currentValue) && sameContainerKind(oldValue, currentValue)) {
+      const subtreeDelta = computeDelta(oldValue, currentValue);
+      if (subtreeDelta.length === 0) return null;
+      return this._wrapDeltaAtPath(path, subtreeDelta as unknown as Diff);
+    }
+
+    const parentPath = path.slice(0, -1);
+    const key = path[path.length - 1];
+
+    // Array element changes: diff the entire parent array (tree-diff array patches are tail-strict).
+    const oldParent = getAtPath(this._lastSnapshot, parentPath);
+    const currentParent = getAtPath(this._data, parentPath);
+    if (Array.isArray(oldParent) && Array.isArray(currentParent)) {
+      const arrDelta = computeDelta(oldParent, currentParent);
+      if (arrDelta.length === 0) return null;
+      return this._wrapDeltaAtPath(parentPath, arrDelta as unknown as Diff);
+    }
+
+    // Object property changes: diff a 1-key wrapper so we preserve delete vs explicit undefined.
+    if (isPlainObject(oldParent) && isPlainObject(currentParent) && typeof key === 'string') {
+      const oldHas = Object.prototype.hasOwnProperty.call(oldParent, key);
+      const currentHas = Object.prototype.hasOwnProperty.call(currentParent, key);
+
+      const oldWrapper: Record<string, unknown> = oldHas ? { [key]: oldParent[key] } : {};
+      const currentWrapper: Record<string, unknown> = currentHas ? { [key]: currentParent[key] } : {};
+
+      const wrapperDelta = computeDelta(oldWrapper, currentWrapper);
+      if (wrapperDelta.length === 0) return null;
+      return this._wrapDeltaAtPath(parentPath, wrapperDelta as unknown as Diff);
+    }
+
+    // Fallback: compute full root delta.
+    const fallback = this._computeDeltaForPath([]);
+    return fallback;
   }
 }
