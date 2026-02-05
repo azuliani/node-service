@@ -1,36 +1,72 @@
 {
-  "name": "@azuliani/node-service",
-  "version": "0.0.1",
-  "description": "Node.js library for building services with ZeroMQ-based messaging patterns",
-  "main": "index.js",
+  "name": "node-service",
+  "version": "0.1.0",
+  "description": "WebSocket-based messaging library with Service/Client abstractions",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
-    "index.js",
-    "Client/",
-    "Service/",
-    "misc/"
+    "dist"
   ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=23.6.0"
+  },
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "bench:nested": "node benchmark/nested-subobjects.js"
+    "test": "node --test --test-force-exit --test-concurrency=1",
+    "test:watch": "node --test --watch --test-force-exit",
+    "test:coverage": "node --test --test-force-exit --test-concurrency=1 --experimental-test-coverage",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\"",
+    "build": "npm run clean && tsc",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prepublishOnly": "npm run typecheck && npm run build",
+    "docs": "typedoc",
+    "bench": "node benchmark/index.ts",
+    "bench:diff": "node benchmark/index.ts --scenario=diff-modes",
+    "bench:scale": "node benchmark/index.ts --scenario=state-sizes",
+    "bench:clients": "node benchmark/index.ts --scenario=client-scaling",
+    "bench:throughput": "node benchmark/index.ts --scenario=update-frequency",
+    "bench:init": "node benchmark/index.ts --scenario=init-latency",
+    "bench:compare": "node benchmark/compare-old-new.ts",
+    "bench:nested": "node benchmark/index.ts --scenario=nested-subobjects",
+    "bench:fastcopy": "node benchmark/index.ts --scenario=proxy-fastcopy"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/azuliani/node-service.git"
-  },
-  "bugs": {
-    "url": "https://github.com/azuliani/node-service/issues"
-  },
-  "homepage": "https://github.com/azuliani/node-service#readme",
-  "author": "Alexander Zuliani",
+  "keywords": [
+    "websocket",
+    "messaging",
+    "rpc",
+    "pubsub",
+    "service",
+    "client"
+  ],
+  "author": "",
   "license": "MIT",
-  "overrides": {
-    "lodash": ">=4.17.23"
-  },
   "dependencies": {
-    "@azuliani/deep-diff": "0.0.1",
+    "debug": "^4.4.0",
+    "@azuliani/deep-diff": "^1.0.1",
     "fast-copy": "^3.0.2",
-    "schema-inspector": "^2.1.0",
-    "tinycache": "^1.1.2",
-    "zeromq": "^6.1.2"
+    "typebox": "^1.0.0",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.57.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.13.4",
+    "@types/ws": "^8.5.13",
+    "eslint": "^9.20.0",
+    "prettier": "^3.5.1",
+    "typedoc": "^0.27.6",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0"
   }
 }
