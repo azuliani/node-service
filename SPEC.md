@@ -1,4 +1,4 @@
-# node-service Specification
+# @azuliani/node-service Specification
 
 A WebSocket-based messaging library for Node.js with Service/Client abstractions.
 
@@ -17,7 +17,7 @@ export { healthPlugin, metricsPlugin, auditLogPlugin }
 export { ErrorCode, hasErrorCode, getErrorCode }
 
 // Type definitions
-export type { Descriptor, Endpoint, RPCEndpoint, PubSubEndpoint, PushPullEndpoint, SharedObjectEndpoint }
+export type { Descriptor, Endpoint, RPCEndpoint, PubSubEndpoint, SharedObjectEndpoint }
 export type { ServiceOptions, ClientOptions, Handlers, Initials, TransportConfig }
 export type { JSONSchema, Diff, SerializedError, HeartbeatMessage }
 
@@ -38,7 +38,6 @@ All patterns use a single WebSocket server on one port (single connection per cl
 |---------|--------|--------|----------|
 | RPC | WS request/response | WS request/response | Request/response |
 | PubSub | WS broadcast | WS receive | Pub/sub |
-| PushPull | WS round-robin | WS receive | Work distribution |
 | SharedObject | WS broadcast | WS receive | State sync via diffs |
 
 ## 2. Technical Stack
@@ -118,12 +117,10 @@ src/
 └── endpoints/
     ├── service/          # Server-side endpoints
     │   ├── PubSubEndpoint.ts
-    │   ├── PushPullEndpoint.ts
     │   └── SharedObjectEndpoint.ts
     └── client/           # Client-side endpoints
         ├── RPCClient.ts
         ├── PubSubClient.ts
-        ├── PushPullClient.ts
         └── SharedObjectClient.ts
 test/
 ├── helpers.ts            # Test utilities
@@ -143,7 +140,6 @@ interface Descriptor {
 type Endpoint =
   | { name: string; type: "RPC"; requestSchema: JSONSchema; replySchema: JSONSchema }
   | { name: string; type: "PubSub"; messageSchema: JSONSchema }
-  | { name: string; type: "PushPull"; messageSchema: JSONSchema }
   | { name: string; type: "SharedObject"; objectSchema: JSONSchema; autoNotify?: boolean };
 ```
 
@@ -269,29 +265,7 @@ Events: `'message'`, `'connected'`, `'disconnected'`
 { endpoint: string, message: T }
 ```
 
-## 9. PushPull Pattern (Work Distribution)
-
-Server distributes work round-robin via WebSocket.
-
-### Service
-```typescript
-push(message: T): void  // Validates, sends to next worker (queues if none connected)
-```
-
-### Client
-```typescript
-subscribe(): void
-unsubscribe(): void
-```
-
-Extends EventEmitter. Emits `'message'` with work item.
-
-### Wire Format
-```typescript
-{ endpoint: string, message: T }
-```
-
-## 10. SharedObject Pattern (State Sync)
+## 9. SharedObject Pattern (State Sync)
 
 Synchronized state via diffs over WebSocket.
 
@@ -385,7 +359,7 @@ type Diff =
 
 The optional `$dates` property contains paths to Date values within `rhs`/`lhs` that were serialized as ISO strings. When present, `applyChange()` automatically restores these to Date objects.
 
-## 12. Heartbeat System
+## 10. Heartbeat System
 
 ### Server
 Broadcasts to all WebSocket clients:
@@ -399,7 +373,7 @@ Broadcasts to all WebSocket clients:
 - Timeout threshold: 3× heartbeat frequency
 - On timeout: emit disconnected, flush state, auto-reconnect
 
-## 13. Validation
+## 11. Validation
 
 ### Exported Functions
 ```typescript
@@ -430,12 +404,11 @@ Recursively traverse schema to find date formats:
 ### Validation Timing
 - **RPC:** Request validated on server (dates parsed), response validated both sides
 - **PubSub:** Validated server (no dates), validated client (dates parsed)
-- **PushPull:** Validated server (no dates)
 - **SharedObject:** Full object validated server, diffs parsed client-side
 
 Validation failures throw `ValidationError` synchronously.
 
-## 14. Error Types
+## 12. Error Types
 
 ```typescript
 abstract class BaseError extends Error {
@@ -468,7 +441,7 @@ RPC serializes errors as `{ message, name, code, stack }`. The client receives e
 
 Use the exported `ErrorCode` constant for type-safe error code checking:
 ```typescript
-import { ErrorCode, hasErrorCode } from 'node-service';
+import { ErrorCode, hasErrorCode } from '@azuliani/node-service';
 
 try {
   await client.RPC('MyRPC').call(input);
@@ -479,7 +452,7 @@ try {
 }
 ```
 
-## 15. Transport Implementation
+## 13. Transport Implementation
 
 ### ServerTransport + UwsServerTransport
 
@@ -493,9 +466,8 @@ The server transport exposes a single WebSocket endpoint at `/` and provides raw
 
 `MuxServer` is responsible for:
 - Crash-fast JSON parsing for inbound frames (malformed JSON is treated as a protocol bug)
-- Subscription routing (`sub` / `unsub`) for PubSub / PushPull / SharedObject
+- Subscription routing (`sub` / `unsub`) for PubSub / SharedObject
 - RPC request/response correlation (`rpc:req` / `rpc:res`)
-- PushPull queuing when no workers are subscribed
 - SharedObject init-before-update ordering (init is sent before adding a connection to the broadcast set)
 
 ### ClientTransport + WsClientTransport
@@ -514,7 +486,7 @@ Client transport uses `ws` and supports auto-reconnect. It passes raw text frame
 
 `WsServerTransport` exists as a placeholder for a future `ws`-based server implementation for performance comparisons.
 
-## 16. Utilities
+## 14. Utilities
 
 ```typescript
 function waitFor(emitter: EventEmitter, event: string, timeout?: number): Promise<any>
@@ -522,13 +494,13 @@ function delay(ms: number): Promise<void>
 function parseHostPort(url: string): { host: string; port: number }
 ```
 
-## 17. Test Requirements
+## 15. Test Requirements
 
 1. **Unique ports** - Each test uses unique port (increment 100+)
 2. **Teardown order** - `client.unsubscribe()` → `delay(50)` → `client.close()` → `server.close()` → `delay(50)`
 3. **Port flakiness** - TCP TIME_WAIT can cause "Address already in use". Use time-slot-based allocation in test/helpers.ts.
 
-## 18. Package Configuration
+## 16. Package Configuration
 
 ```json
 {
@@ -548,7 +520,7 @@ Dependencies:
 - `fast-copy`: `^3.x`
 - `debug`: `^4.x`
 
-## 19. Troubleshooting
+## 17. Troubleshooting
 
 ### Connection Issues
 

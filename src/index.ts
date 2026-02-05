@@ -1,5 +1,5 @@
 /**
- * node-service: WebSocket-based messaging library with Service/Client abstractions.
+ * `@azuliani/node-service`: WebSocket-based messaging library with Service/Client abstractions.
  *
  * ## Public API
  * Runtime exports are intentionally minimal:
@@ -11,8 +11,8 @@
  *
  * ## Example (RPC)
  * ```ts
- * import { Service, Client } from 'node-service';
- * import type { Descriptor, RPCEndpoint } from 'node-service';
+ * import { Service, Client } from '@azuliani/node-service';
+ * import type { Descriptor, RPCEndpoint } from '@azuliani/node-service';
  *
  * const descriptor: Descriptor = {
  *   transport: { server: '127.0.0.1:3000', client: '127.0.0.1:3000' },
@@ -38,8 +38,8 @@
  *
  * ## Example (SharedObject)
  * ```ts
- * import { Service, Client } from 'node-service';
- * import type { Descriptor, SharedObjectEndpoint } from 'node-service';
+ * import { Service, Client } from '@azuliani/node-service';
+ * import type { Descriptor, SharedObjectEndpoint } from '@azuliani/node-service';
  *
  * const descriptor: Descriptor = {
  *   transport: { server: '127.0.0.1:3001', client: '127.0.0.1:3001' },
@@ -85,7 +85,6 @@ export type {
   Endpoint,
   RPCEndpoint,
   PubSubEndpoint,
-  PushPullEndpoint,
   SharedObjectEndpoint,
   ServiceOptions,
   ClientOptions,

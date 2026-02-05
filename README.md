@@ -1,9 +1,9 @@
-# node-service
+# @azuliani/node-service
 
 WebSocket-based messaging library for Node.js with `Service`/`Client` abstractions.
 
 - Single WebSocket connection per client (muxed frames)
-- Patterns: **RPC**, **PubSub**, **PushPull**, **SharedObject** (diff-based state sync)
+- Patterns: **RPC**, **PubSub**, **SharedObject** (diff-based state sync)
 - JSON Schema validation with automatic `Date` serialization/parsing (`format: "date"` / `"date-time"`)
 - Heartbeats + reconnect support
 
@@ -14,14 +14,14 @@ For the full specification, see [SPEC.md](./SPEC.md). For intentional spec/impl 
 Requires **Node.js >= 23.6.0**.
 
 ```bash
-npm install node-service
+npm install @azuliani/node-service
 ```
 
 ## Quick start (RPC)
 
 ```ts
-import { Client, Service } from 'node-service';
-import type { Descriptor, RPCEndpoint } from 'node-service';
+import { Client, Service } from '@azuliani/node-service';
+import type { Descriptor, RPCEndpoint } from '@azuliani/node-service';
 
 const descriptor: Descriptor = {
   transport: {
@@ -68,7 +68,7 @@ await service.close();
 This package ships both ESM and CommonJS entrypoints. In CommonJS, use `require()`:
 
 ```js
-const { Client, Service } = require('node-service');
+const { Client, Service } = require('@azuliani/node-service');
 ```
 
 ## Patterns
@@ -80,18 +80,13 @@ All patterns share one WebSocket per client at `ws://{descriptor.transport.clien
 - Server: `service.PS('Events').send(message)`
 - Client: `client.PS('Events').subscribe()` then listen for `'message'`
 
-### PushPull
-
-- Server: `service.PP('Work').push(message)` → returns `true` if delivered, `false` if queued (no workers)
-- Client: `client.PP('Work').subscribe()` then listen for `'message'`
-
 ### SharedObject
 
 SharedObject state lives on the server; clients receive an `init` snapshot, then `update` diffs.
 
 ```ts
-import { Client, Service } from 'node-service';
-import type { Descriptor, SharedObjectEndpoint } from 'node-service';
+import { Client, Service } from '@azuliani/node-service';
+import type { Descriptor, SharedObjectEndpoint } from '@azuliani/node-service';
 
 const descriptor: Descriptor = {
   transport: { server: '127.0.0.1:3001', client: '127.0.0.1:3001' },
@@ -134,8 +129,8 @@ import {
   defineServiceSpec,
   healthPlugin,
   metricsPlugin,
-} from 'node-service';
-import type { RPCEndpoint } from 'node-service';
+} from '@azuliani/node-service';
+import type { RPCEndpoint } from '@azuliani/node-service';
 
 const spec = defineServiceSpec({
   transport: { server: '0.0.0.0:3000', client: '127.0.0.1:3000' },

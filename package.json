@@ -1,7 +1,14 @@
 {
-  "name": "node-service",
+  "name": "@azuliani/node-service",
   "version": "0.1.0",
   "description": "WebSocket-based messaging library with Service/Client abstractions",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azuliani/node-service.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/cjs/index.js",
   "types": "./dist/types/index.d.ts",
@@ -34,7 +41,9 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "prepublishOnly": "npm run typecheck && npm run build",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test && npm run typecheck && npm run build",
     "docs": "typedoc",
     "bench": "node benchmark/index.ts",
     "bench:diff": "node benchmark/index.ts --scenario=diff-modes",
