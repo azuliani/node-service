@@ -5,6 +5,15 @@
  * - createWriteProxy: Internal for server-side mutation detection
  */
 
+import copy from 'fast-copy';
+
+/**
+ * Symbol used to unwrap a read-only proxy to its underlying target.
+ * The write proxy detects this on assigned values and deep-copies
+ * the underlying target instead of storing the live proxy reference.
+ */
+export const UNWRAP_PROXY = Symbol('UNWRAP_PROXY');
+
 /**
  * Array methods that mutate the array.
  */
@@ -156,8 +165,13 @@ export class PathTree {
  * @returns A read-only proxy of the object
  */
 export function createReadOnlyProxy<T extends object>(obj: T): T {
+  const proxyCache = new WeakMap<object, object>();
+
   const handler: ProxyHandler<T> = {
     get: (target, prop, receiver) => {
+      // Return the underlying target so the write proxy can deep-copy it
+      if (prop === UNWRAP_PROXY) return target;
+
       const value = Reflect.get(target, prop, receiver);
 
       // Handle Date objects specially - don't proxy them
@@ -167,7 +181,12 @@ export function createReadOnlyProxy<T extends object>(obj: T): T {
 
       // Recursively proxy nested objects
       if (value !== null && typeof value === 'object') {
-        return new Proxy(value, handler as ProxyHandler<typeof value>);
+        let cached = proxyCache.get(value);
+        if (!cached) {
+          cached = new Proxy(value, handler as ProxyHandler<typeof value>);
+          proxyCache.set(value, cached);
+        }
+        return cached;
       }
 
       return value;
@@ -208,8 +227,8 @@ function createNestedProxy<T extends object>(
   basePath: (string | number)[],
   onMutation: (path: (string | number)[]) => void
 ): T {
-  // Cache for proxied nested objects to maintain reference equality
-  const proxyCache = new WeakMap<object, object>();
+  // Cache for proxied nested objects keyed by property key, with target check for staleness
+  const proxyCache = new Map<string | number, { target: object; proxy: object }>();
 
   const handler: ProxyHandler<T> = {
     get: (obj, prop, receiver) => {
@@ -232,16 +251,17 @@ function createNestedProxy<T extends object>(
 
       // Recursively proxy nested objects
       if (value !== null && typeof value === 'object') {
-        // Check cache first
-        if (proxyCache.has(value)) {
-          return proxyCache.get(value);
+        const key = Array.isArray(obj) ? normalizeArrayKey(prop as string) : prop;
+
+        // Check cache by property key, verify target hasn't changed
+        const cached = proxyCache.get(key as string | number);
+        if (cached && cached.target === value) {
+          return cached.proxy;
         }
 
-        // Convert numeric string props to numbers for array access
-        const key = Array.isArray(obj) ? normalizeArrayKey(prop as string) : prop;
         const nestedPath = [...basePath, key as string | number];
         const proxy = createNestedProxy(value, nestedPath, onMutation);
-        proxyCache.set(value, proxy);
+        proxyCache.set(key as string | number, { target: value, proxy });
         return proxy;
       }
 
@@ -260,10 +280,13 @@ function createNestedProxy<T extends object>(
         ? [...basePath]
         : [...basePath, key as string | number];
 
-      // Invalidate cache for the old value if it was an object (before set)
-      const oldValue = Reflect.get(obj, prop);
-      if (oldValue !== null && typeof oldValue === 'object') {
-        proxyCache.delete(oldValue as object);
+      // Invalidate cache for this key (before set)
+      proxyCache.delete(key as string | number);
+
+      // Unwrap read-only proxies: deep-copy the underlying target
+      // to avoid storing a live reference to foreign SharedObject state.
+      if (value !== null && typeof value === 'object' && (value as any)[UNWRAP_PROXY]) {
+        value = copy((value as any)[UNWRAP_PROXY]);
       }
 
       // Perform the set
@@ -288,11 +311,8 @@ function createNestedProxy<T extends object>(
         ? [...basePath]
         : [...basePath, key as string | number];
 
-      // Invalidate cache for the value if it was an object
-      const value = Reflect.get(obj, prop);
-      if (value !== null && typeof value === 'object') {
-        proxyCache.delete(value as object);
-      }
+      // Invalidate cache for this key
+      proxyCache.delete(key as string | number);
 
       const result = Reflect.deleteProperty(obj, prop);
 
