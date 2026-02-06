@@ -90,6 +90,14 @@ describe('Proxy Fast-Copy Behavior', () => {
         assert.strictEqual(raw.count, 42);
       });
 
+      it('should return same proxy reference for same nested object', () => {
+        const raw = createTestData();
+        const proxied = createReadOnlyProxy(raw);
+        assert.strictEqual(proxied.nested === proxied.nested, true);
+        assert.strictEqual(proxied.items === proxied.items, true);
+        assert.strictEqual(proxied.nested.level1 === proxied.nested.level1, true);
+      });
+
       it('should create independent copy (no reference sharing)', () => {
         const raw = createTestData();
         const proxied = createReadOnlyProxy(raw);

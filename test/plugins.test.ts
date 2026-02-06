@@ -5,6 +5,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createClient, createService, defineServiceSpec, healthPlugin, metricsPlugin, auditLogPlugin } from '../src/index.ts';
+import type { ServicePlugin } from '../src/plugins.ts';
 import { delay, getAvailablePort } from './helpers.ts';
 
 describe('Plugins', () => {
@@ -97,6 +98,51 @@ describe('Plugins', () => {
       const metrics = await client.RPC('_metrics').call(null, 2000);
       assert.strictEqual(metrics.rpc.Ping.calls, 2);
       assert.strictEqual(metrics.rpc.Ping.errors, 0);
+    });
+  });
+
+  describe('throwing onServiceReady plugin', () => {
+    it('should not crash the service when onServiceReady throws', async () => {
+      const port = await getAvailablePort();
+
+      const badPlugin: ServicePlugin = {
+        name: 'bad-plugin',
+        onServiceReady: () => {
+          throw new Error('boom');
+        },
+      };
+
+      const spec = defineServiceSpec({
+        transport: {
+          server: `127.0.0.1:${port}`,
+          client: `127.0.0.1:${port}`,
+        },
+        endpoints: [
+          {
+            name: 'Echo',
+            type: 'RPC',
+            requestSchema: { type: 'string' },
+            replySchema: { type: 'string' },
+          },
+        ],
+        plugins: [badPlugin],
+      });
+
+      const service = createService(spec, {
+        Echo: async (input: string) => input,
+      });
+      await service.ready();
+
+      // The service should still be operational despite the plugin error
+      const client = createClient(spec);
+      await delay(50);
+
+      const result = await client.RPC('Echo').call('hello', 2000);
+      assert.strictEqual(result, 'hello');
+
+      client.close();
+      await service.close();
+      await delay(50);
     });
   });
 

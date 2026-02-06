@@ -72,15 +72,6 @@ export interface PubSubEndpoint {
 }
 
 /**
- * PushPull endpoint definition (work distribution).
- */
-export interface PushPullEndpoint {
-  name: string;
-  type: 'PushPull';
-  messageSchema: JSONSchema;
-}
-
-/**
  * SharedObject endpoint definition (state synchronization).
  */
 export interface SharedObjectEndpoint {
@@ -101,7 +92,6 @@ export interface SharedObjectEndpoint {
 export type Endpoint =
   | RPCEndpoint
   | PubSubEndpoint
-  | PushPullEndpoint
   | SharedObjectEndpoint;
 
 /**
@@ -164,12 +154,4 @@ export interface SerializedError {
   code?: string;
   endpoint?: string;
   stack?: string;
-}
-
-/**
- * Heartbeat message wire format.
- */
-export interface HeartbeatMessage {
-  type: 'heartbeat';
-  frequencyMs: number;
 }

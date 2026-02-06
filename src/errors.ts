@@ -9,7 +9,6 @@ export const ErrorCode = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   TIMEOUT: 'TIMEOUT',
   CONNECTION_FAILED: 'CONNECTION_FAILED',
-  VERSION_MISMATCH: 'VERSION_MISMATCH',
   DESCRIPTOR_MISMATCH: 'DESCRIPTOR_MISMATCH',
   MISSING_HANDLER: 'MISSING_HANDLER',
   UNKNOWN_ENDPOINT: 'UNKNOWN_ENDPOINT',
@@ -75,17 +74,6 @@ export class ConnectionError extends BaseError {
 
   constructor(message = 'Connection failed') {
     super(message);
-  }
-}
-
-/**
- * Thrown when version numbers don't match expected sequence.
- */
-export class VersionMismatchError extends BaseError {
-  readonly code = 'VERSION_MISMATCH' as const;
-
-  constructor(expected: number, received: number) {
-    super(`Version mismatch: expected ${expected}, received ${received}`);
   }
 }
 

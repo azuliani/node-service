@@ -5,7 +5,6 @@
 import type { Descriptor } from '../types.ts';
 import type { ServicePlugin } from '../plugins.ts';
 import type { PubSubEndpoint } from '../endpoints/service/PubSubEndpoint.ts';
-import type { PushPullEndpoint } from '../endpoints/service/PushPullEndpoint.ts';
 import type { SharedObjectEndpoint } from '../endpoints/service/SharedObjectEndpoint.ts';
 
 interface RpcMetrics {
@@ -20,7 +19,6 @@ export interface MetricsSnapshot {
   startedAt: string;
   rpc: Record<string, { calls: number; errors: number; avgMs: number; minMs: number; maxMs: number }>;
   pubsub: Record<string, { count: number }>;
-  pushpull: Record<string, { pushes: number; queued: number }>;
   sharedobject: Record<string, { count: number }>;
 }
 
@@ -62,7 +60,6 @@ export function metricsPlugin(): ServicePlugin {
   const startedAt = new Date().toISOString();
   const rpcMetrics = new Map<string, RpcMetrics>();
   const pubSubCounts = new Map<string, { count: number }>();
-  const pushPullCounts = new Map<string, { pushes: number; queued: number }>();
   const sharedObjectCounts = new Map<string, { count: number }>();
 
   const ensureCount = (map: Map<string, { count: number }>, name: string): { count: number } => {
@@ -74,22 +71,12 @@ export function metricsPlugin(): ServicePlugin {
     return entry;
   };
 
-  const ensurePushPull = (name: string): { pushes: number; queued: number } => {
-    let entry = pushPullCounts.get(name);
-    if (!entry) {
-      entry = { pushes: 0, queued: 0 };
-      pushPullCounts.set(name, entry);
-    }
-    return entry;
-  };
-
   const snapshot = (): MetricsSnapshot => ({
     startedAt,
     rpc: Object.fromEntries(
       Array.from(rpcMetrics.entries()).map(([name, metrics]) => [name, toRpcSnapshot(metrics)])
     ),
     pubsub: Object.fromEntries(pubSubCounts),
-    pushpull: Object.fromEntries(pushPullCounts),
     sharedobject: Object.fromEntries(sharedObjectCounts),
   });
 
@@ -103,7 +90,7 @@ export function metricsPlugin(): ServicePlugin {
         replySchema: {
           type: 'object',
           additionalProperties: false,
-          required: ['startedAt', 'rpc', 'pubsub', 'pushpull', 'sharedobject'],
+          required: ['startedAt', 'rpc', 'pubsub', 'sharedobject'],
           properties: {
             startedAt: { type: 'string', format: 'date-time' },
             rpc: {
@@ -129,18 +116,6 @@ export function metricsPlugin(): ServicePlugin {
                 required: ['count'],
                 properties: {
                   count: { type: 'number' },
-                },
-              },
-            },
-            pushpull: {
-              type: 'object',
-              additionalProperties: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['pushes', 'queued'],
-                properties: {
-                  pushes: { type: 'number' },
-                  queued: { type: 'number' },
                 },
               },
             },
@@ -204,25 +179,6 @@ export function metricsPlugin(): ServicePlugin {
               };
               (wrapped as any)[WRAPPED] = true;
               (source as any).send = wrapped;
-            }
-            break;
-          }
-          case 'PushPull': {
-            const pushpull = service.getEndpoint<PushPullEndpoint>(endpoint.name);
-            const original = (pushpull as any).push as (message: unknown) => boolean;
-            if (!(original as any)[WRAPPED]) {
-              const wrapped = function (this: PushPullEndpoint, message: unknown) {
-                const entry = ensurePushPull(endpoint.name);
-                const ok = original.call(this, message) as boolean;
-                if (ok) {
-                  entry.pushes += 1;
-                } else {
-                  entry.queued += 1;
-                }
-                return ok;
-              };
-              (wrapped as any)[WRAPPED] = true;
-              (pushpull as any).push = wrapped;
             }
             break;
           }

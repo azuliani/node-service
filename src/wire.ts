@@ -1,7 +1,7 @@
 /**
  * Wire protocol frames for the single WebSocket multiplexed transport.
  *
- * All traffic (RPC, PubSub, PushPull, SharedObject, heartbeat) is sent over a
+ * All traffic (RPC, PubSub, SharedObject, heartbeat) is sent over a
  * single WebSocket connection at path `/`.
  */
 
@@ -42,9 +42,10 @@ export interface RpcResponseFrame {
 }
 
 /**
- * Generic endpoint message (PubSub + PushPull).
+ * Generic endpoint message (PubSub).
  */
 export interface EndpointMessageFrame {
+  type: 'message';
   endpoint: string;
   message: any;
 }

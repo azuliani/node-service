@@ -395,6 +395,44 @@ describe('Helpers', () => {
     it('should throw on invalid port', () => {
       assert.throws(() => parseHostPort('localhost:abc'), /Invalid port/);
     });
+
+    it('should reject port 0', () => {
+      assert.throws(() => parseHostPort('localhost:0'), /Port out of range/);
+    });
+
+    it('should reject negative port', () => {
+      assert.throws(() => parseHostPort('localhost:-1'), /Port out of range/);
+    });
+
+    it('should reject port above 65535', () => {
+      assert.throws(() => parseHostPort('localhost:70000'), /Port out of range/);
+    });
+
+    it('should accept port 1', () => {
+      const result = parseHostPort('localhost:1');
+      assert.strictEqual(result.port, 1);
+    });
+
+    it('should accept port 65535', () => {
+      const result = parseHostPort('localhost:65535');
+      assert.strictEqual(result.port, 65535);
+    });
+  });
+
+  describe('computeEndpointsHash', async () => {
+    const { computeEndpointsHash } = await import('../src/helpers.ts');
+
+    it('should produce the same hash regardless of property order', () => {
+      const a = [{ type: 'RPC' as const, name: 'foo', requestSchema: {}, replySchema: {} }];
+      const b = [{ name: 'foo', requestSchema: {}, replySchema: {}, type: 'RPC' as const }];
+      assert.strictEqual(computeEndpointsHash(a), computeEndpointsHash(b));
+    });
+
+    it('should produce different hashes for different endpoints', () => {
+      const a = [{ type: 'RPC' as const, name: 'foo', requestSchema: {}, replySchema: {} }];
+      const b = [{ type: 'RPC' as const, name: 'bar', requestSchema: {}, replySchema: {} }];
+      assert.notStrictEqual(computeEndpointsHash(a), computeEndpointsHash(b));
+    });
   });
 
   describe('waitFor', async () => {

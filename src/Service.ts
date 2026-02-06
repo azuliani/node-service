@@ -20,17 +20,15 @@ import type { ServerTransport } from './transports/ServerTransport.ts';
 import { UwsServerTransport } from './transports/UwsServerTransport.ts';
 import { MuxServer } from './mux/MuxServer.ts';
 import { PubSubEndpoint } from './endpoints/service/PubSubEndpoint.ts';
-import { PushPullEndpoint } from './endpoints/service/PushPullEndpoint.ts';
 import { SharedObjectEndpoint } from './endpoints/service/SharedObjectEndpoint.ts';
 import type { RpcRequestFrame } from './wire.ts';
 
 const debug = createDebug('node-service:service');
 
 function getServiceEndpointType(
-  endpoint: PubSubEndpoint | PushPullEndpoint | SharedObjectEndpoint
-): 'PubSub' | 'PushPull' | 'SharedObject' {
+  endpoint: PubSubEndpoint | SharedObjectEndpoint
+): 'PubSub' | 'SharedObject' {
   if (endpoint instanceof PubSubEndpoint) return 'PubSub';
-  if (endpoint instanceof PushPullEndpoint) return 'PushPull';
   return 'SharedObject';
 }
 
@@ -50,6 +48,7 @@ export class Service {
 
   // Heartbeat
   private _heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private _closed = false;
 
   // Ready state
   private _readyPromise: Promise<void>;
@@ -58,7 +57,7 @@ export class Service {
   private _readySettled = false;
 
   // Endpoint instances
-  private _endpoints: Map<string, PubSubEndpoint | PushPullEndpoint | SharedObjectEndpoint> = new Map();
+  private _endpoints: Map<string, PubSubEndpoint | SharedObjectEndpoint> = new Map();
   private _rpcValidators: Map<string, { request: CompiledValidator; reply: CompiledValidator }> = new Map();
   private _rpcInvokers: Map<string, { name: string; call: <TInput = unknown, TOutput = unknown>(input: TInput, timeout?: number) => Promise<TOutput> }> = new Map();
 
@@ -114,6 +113,10 @@ export class Service {
    */
   close(): Promise<void> {
     debug('Closing service');
+    this._closed = true;
+    if (!this._readySettled) {
+      this._readyReject(new Error('Service closed'));
+    }
 
     // Stop heartbeat
     if (this._heartbeatInterval) {
@@ -184,13 +187,13 @@ export class Service {
     const invoker = {
       name,
       call: async <TInput = unknown, TOutput = unknown>(input: TInput, timeout = 10000): Promise<TOutput> => {
-        const serializedInput = serializeDates(input);
+        const serializedInput = validators.request.hasDates ? serializeDates(input) : input;
         const validatedInput = validators.request.validateAndParseDates(serializedInput);
 
         const handlerPromise = Promise.resolve(handler(validatedInput));
         const result = await withTimeout(handlerPromise, timeout);
 
-        const serializedOutput = serializeDates(result);
+        const serializedOutput = validators.reply.hasDates ? serializeDates(result) : result;
         validators.reply.validate(serializedOutput);
         return validators.reply.validateAndParseDates(serializedOutput) as TOutput;
       },
@@ -208,18 +211,6 @@ export class Service {
     if (!ep) throw new Error(`Unknown endpoint: ${name}`);
     if (!(ep instanceof PubSubEndpoint)) {
       throw new Error(`Endpoint "${name}" is ${getServiceEndpointType(ep)}, expected PubSub`);
-    }
-    return ep;
-  }
-
-  /**
-   * Get a PushPull endpoint by name.
-   */
-  PP(name: string): PushPullEndpoint {
-    const ep = this._endpoints.get(name);
-    if (!ep) throw new Error(`Unknown endpoint: ${name}`);
-    if (!(ep instanceof PushPullEndpoint)) {
-      throw new Error(`Endpoint "${name}" is ${getServiceEndpointType(ep)}, expected PushPull`);
     }
     return ep;
   }
@@ -254,9 +245,13 @@ export class Service {
    */
   private async _init(): Promise<void> {
     try {
+      if (this._closed) return;
       await this._initTransports();
+      if (this._closed) return;
       this._initEndpoints();
+      if (this._closed) return;
       await this._startListening();
+      if (this._closed) return;
       this._startHeartbeat();
       this._readyResolve();
     } catch (err) {
@@ -318,13 +313,6 @@ export class Service {
           break;
         }
 
-        case 'PushPull': {
-          this._mux.registerPushPullEndpoint(endpoint.name);
-          const pushPullEp = new PushPullEndpoint(this._mux, endpoint);
-          this._endpoints.set(endpoint.name, pushPullEp);
-          break;
-        }
-
         case 'SharedObject': {
           const initial = this._initials[endpoint.name];
           if (initial === undefined) {
@@ -367,7 +355,7 @@ export class Service {
       const result = await handler(validatedInput);
 
       // Serialize dates and validate result
-      const serialized = serializeDates(result);
+      const serialized = validators.reply.hasDates ? serializeDates(result) : result;
       validators.reply.validate(serialized);
 
       return { err: null, res: serialized };

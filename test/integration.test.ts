@@ -5,13 +5,14 @@
 import { describe, it, after, before } from 'node:test';
 import assert from 'node:assert';
 import { Service, Client } from '../src/index.ts';
-import { MissingHandlerError } from '../src/errors.ts';
+import { MissingHandlerError, DescriptorMismatchError } from '../src/errors.ts';
 import {
   createDescriptor,
   createDescriptorAsync,
   getAvailablePort,
   delay,
   waitFor,
+  waitUntil,
 } from './helpers.ts';
 import type {
   Descriptor,
@@ -63,26 +64,30 @@ describe('Integration Tests', () => {
     });
 
     it('should detect descriptor mismatch', async () => {
-      // Create a client with different descriptor (uses different endpoints)
-      const differentDescriptor: Descriptor = await createDescriptorAsync({
-        endpoints: [
-          {
-            name: 'DifferentEndpoint', // Different endpoint name
-            type: 'RPC',
-            requestSchema: { type: 'number' },
-            replySchema: { type: 'number' },
-          } as RPCEndpoint,
-        ],
-      });
+      // Create a client with a mismatched descriptor that connects to the same server
+      const mismatchedDescriptor: Descriptor = createDescriptor(
+        parseInt(descriptor.transport.client.split(':')[1], 10),
+        {
+          endpoints: [
+            {
+              name: 'DifferentEndpoint',
+              type: 'RPC',
+              requestSchema: { type: 'number' },
+              replySchema: { type: 'number' },
+            } as RPCEndpoint,
+          ],
+        }
+      );
 
-      // The validation happens asynchronously on first heartbeat
-      // We can't directly test the error being thrown in the current implementation
-      // because it's caught internally, but we can verify the hashes are different
+      const client = new Client(mismatchedDescriptor);
 
-      const client1Hash = JSON.stringify(descriptor);
-      const client2Hash = JSON.stringify(differentDescriptor);
+      // Wait for the error event — fires on first heartbeat when descriptor validation fails
+      const err = await waitFor<Error>(client, 'error', 5000);
 
-      assert.notStrictEqual(client1Hash, client2Hash, 'Descriptors should be different');
+      assert.ok(
+        err instanceof DescriptorMismatchError,
+        `Expected DescriptorMismatchError but got ${err.constructor.name}: ${err.message}`
+      );
     });
   });
 
@@ -165,7 +170,7 @@ describe('Integration Tests', () => {
     it('should handle RPC and PubSub together', async () => {
       // Subscribe to events
       client.PS('Events').subscribe();
-      await delay(75);
+      await waitFor(client.PS('Events'), 'connected', 2000);
 
       // Set up event listener before making RPC call
       const eventPromise = waitFor(client.PS('Events'), 'message', 2000);
@@ -187,7 +192,7 @@ describe('Integration Tests', () => {
       await client.RPC('Logs').call({ level: 'info', message: 'test log 1' }, 1000);
       await client.RPC('Logs').call({ level: 'warn', message: 'test log 2' }, 1000);
 
-      await delay(100);
+      await waitUntil(() => receivedLogs.length >= 2);
 
       assert.strictEqual(receivedLogs.length, 2);
       assert.strictEqual(receivedLogs[0].level, 'info');
@@ -215,7 +220,7 @@ describe('Integration Tests', () => {
 
       await eventPromise;
 
-      await delay(100);
+      await waitUntil(() => receivedLogs.length >= 1);
 
       assert.ok(rpcSucceeded, 'RPC should succeed');
       assert.ok(eventReceived, 'Event should be received');
@@ -289,7 +294,7 @@ describe('Integration Tests', () => {
       const result = await client.RPC('AddPlayer').call('Player1', 1000);
       assert.strictEqual(result, true);
 
-      await delay(75);
+      await waitUntil(() => (client.SO('GameState').data?.players?.length ?? 0) >= 1);
 
       // State should be updated
       assert.deepStrictEqual(client.SO('GameState').data?.players, ['Player1']);
@@ -300,7 +305,7 @@ describe('Integration Tests', () => {
       await client.RPC('AddPlayer').call('Player2', 1000);
       await client.RPC('AddPlayer').call('Player3', 1000);
 
-      await delay(75);
+      await waitUntil(() => (client.SO('GameState').data?.players?.length ?? 0) >= 3);
 
       assert.deepStrictEqual(client.SO('GameState').data?.players, [
         'Player1',
@@ -393,7 +398,10 @@ describe('Integration Tests', () => {
       client1.PS('Broadcast').subscribe();
       client2.PS('Broadcast').subscribe();
 
-      await delay(75);
+      await Promise.all([
+        waitFor(client1.PS('Broadcast'), 'connected', 2000),
+        waitFor(client2.PS('Broadcast'), 'connected', 2000),
+      ]);
 
       // Send broadcast
       service.PS('Broadcast').send('hello everyone');

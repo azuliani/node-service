@@ -92,7 +92,6 @@ export type {
   Handlers,
   Initials,
   SerializedError,
-  HeartbeatMessage,
 } from './types.ts';
 
 export type {

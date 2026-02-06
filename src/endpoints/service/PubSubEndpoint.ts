@@ -40,13 +40,14 @@ export class PubSubEndpoint {
    * @throws ValidationError if message doesn't match schema
    */
   send(message: unknown): void {
-    const serialized = serializeDates(message);
+    const serialized = this._validator.hasDates ? serializeDates(message) : message;
     this._validator.validate(serialized);
 
     debug('Sending message on %s', this._name);
 
     // Broadcast to all connected clients
     this._mux.broadcast(this._name, {
+      type: 'message',
       endpoint: this._name,
       message: serialized,
     });

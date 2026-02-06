@@ -61,17 +61,37 @@ export function parseHostPort(url: string): { host: string; port: number } {
   if (isNaN(port)) {
     throw new Error(`Invalid port in URL: ${url}`);
   }
+  if (port < 1 || port > 65535) {
+    throw new Error(`Port out of range (1-65535) in URL: ${url}`);
+  }
   return { host, port };
+}
+
+/**
+ * JSON.stringify with sorted keys so property order doesn't affect the output.
+ */
+function canonicalStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, val) => {
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(val).sort()) {
+        sorted[k] = val[k];
+      }
+      return sorted;
+    }
+    return val;
+  });
 }
 
 /**
  * Compute hash of endpoints for descriptor validation.
  * Only hashes endpoints, not transport config, so clients can use different hostnames.
+ * Uses canonical (sorted-key) serialisation so property order is irrelevant.
  *
  * @param endpoints - Array of endpoint definitions
  * @returns SHA-256 hash of the endpoints
  */
 export function computeEndpointsHash(endpoints: Endpoint[]): string {
-  const json = JSON.stringify(endpoints);
+  const json = canonicalStringify(endpoints);
   return createHash('sha256').update(json).digest('hex');
 }

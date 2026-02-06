@@ -5,7 +5,7 @@
 import { describe, it, after, before } from 'node:test';
 import assert from 'node:assert';
 import { Service, Client } from '../src/index.ts';
-import { createDescriptorAsync, getAvailablePort, delay, waitFor } from './helpers.ts';
+import { createDescriptorAsync, getAvailablePort, delay, waitFor, waitUntil } from './helpers.ts';
 import type { Descriptor, PubSubEndpoint } from '../src/index.ts';
 
 describe('PubSub Pattern', () => {
@@ -52,12 +52,12 @@ describe('PubSub Pattern', () => {
       client.PS('notifications').subscribe();
 
       // Wait for subscription to be established
-      await delay(50);
+      await waitFor(client.PS('notifications'), 'connected', 2000);
 
       service.PS('notifications').send({ text: 'Hello', level: 'info' });
       service.PS('notifications').send({ text: 'World', level: 'warn' });
 
-      await delay(50);
+      await waitUntil(() => messages.length >= 2);
 
       assert.strictEqual(messages.length, 2);
       assert.strictEqual(messages[0].text, 'Hello');
@@ -117,10 +117,11 @@ describe('PubSub Pattern', () => {
       const messages: any[] = [];
       client.PS('typed').on('message', (msg: any) => messages.push(msg));
       client.PS('typed').subscribe();
-      await delay(50);
+      await waitFor(client.PS('typed'), 'connected', 2000);
 
       service.PS('typed').send({ count: 42 });
-      await delay(50);
+
+      await waitUntil(() => messages.length >= 1);
 
       assert.strictEqual(messages.length, 1);
       assert.strictEqual(messages[0].count, 42);
@@ -167,12 +168,12 @@ describe('PubSub Pattern', () => {
       const messages: any[] = [];
       client.PS('events').on('message', (msg: any) => messages.push(msg));
       client.PS('events').subscribe();
-      await delay(50);
+      await waitFor(client.PS('events'), 'connected', 2000);
 
       const timestamp = new Date('2024-03-15T14:30:00.000Z');
       service.PS('events').send({ name: 'test', timestamp });
 
-      await delay(50);
+      await waitUntil(() => messages.length >= 1);
 
       assert.strictEqual(messages.length, 1);
       assert.ok(messages[0].timestamp instanceof Date);
@@ -225,10 +226,11 @@ describe('PubSub Pattern', () => {
       const messages: any[] = [];
       client.PS('toggle').on('message', (msg: any) => messages.push(msg));
       client.PS('toggle').subscribe();
-      await delay(50);
+      await waitFor(client.PS('toggle'), 'connected', 2000);
 
       service.PS('toggle').send(2);
-      await delay(50);
+
+      await waitUntil(() => messages.length >= 1);
 
       assert.strictEqual(messages.length, 1);
       assert.strictEqual(messages[0], 2);
@@ -292,10 +294,14 @@ describe('PubSub Pattern', () => {
 
       client1.PS('broadcast').subscribe();
       client2.PS('broadcast').subscribe();
-      await delay(50);
+      await Promise.all([
+        waitFor(client1.PS('broadcast'), 'connected', 2000),
+        waitFor(client2.PS('broadcast'), 'connected', 2000),
+      ]);
 
       service.PS('broadcast').send('hello everyone');
-      await delay(50);
+
+      await waitUntil(() => messages1.length >= 1 && messages2.length >= 1);
 
       assert.strictEqual(messages1.length, 1);
       assert.strictEqual(messages1[0], 'hello everyone');

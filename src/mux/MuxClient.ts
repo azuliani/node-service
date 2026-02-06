@@ -72,6 +72,7 @@ export class MuxClient extends EventEmitter {
     this._transport.onMessage((text) => {
       // Crash-fast: malformed JSON is a protocol bug.
       const frame = JSON.parse(text) as ServerToClientFrame;
+      this.emit('rawMessage');
       this._handleFrame(frame);
     });
   }
@@ -217,6 +218,7 @@ export class MuxClient extends EventEmitter {
       return;
     }
 
+    // Route endpoint-scoped frames (message, init, update) to handlers.
     if ('endpoint' in frame && typeof (frame as any).endpoint === 'string') {
       const endpoint = (frame as any).endpoint as string;
       const handler = this._handlers.get(endpoint);

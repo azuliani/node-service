@@ -4,17 +4,17 @@
  * Creates and manages a single mux connection and endpoints.
  */
 
+import { EventEmitter } from 'events';
 import createDebug from 'debug';
 import { DescriptorMismatchError } from './errors.ts';
 import { computeEndpointsHash } from './helpers.ts';
 import type {
   Descriptor,
   ClientOptions,
-  HeartbeatMessage,
 } from './types.ts';
+import type { HeartbeatFrame } from './wire.ts';
 import { RPCClient } from './endpoints/client/RPCClient.ts';
 import { PubSubClient } from './endpoints/client/PubSubClient.ts';
-import { PushPullClient } from './endpoints/client/PushPullClient.ts';
 import { SharedObjectClient } from './endpoints/client/SharedObjectClient.ts';
 import { MuxClient } from './mux/MuxClient.ts';
 import { WsClientTransport } from './transports/WsClientTransport.ts';
@@ -22,18 +22,17 @@ import { WsClientTransport } from './transports/WsClientTransport.ts';
 const debug = createDebug('node-service:client');
 
 function getClientEndpointType(
-  endpoint: RPCClient | PubSubClient | PushPullClient | SharedObjectClient
-): 'RPC' | 'PubSub' | 'PushPull' | 'SharedObject' {
+  endpoint: RPCClient | PubSubClient | SharedObjectClient
+): 'RPC' | 'PubSub' | 'SharedObject' {
   if (endpoint instanceof RPCClient) return 'RPC';
   if (endpoint instanceof PubSubClient) return 'PubSub';
-  if (endpoint instanceof PushPullClient) return 'PushPull';
   return 'SharedObject';
 }
 
 /**
  * Client class for client-side messaging.
  */
-export class Client {
+export class Client extends EventEmitter {
   private _descriptor: Descriptor;
   private _options: { initTimeout: number; clientTransport?: ClientOptions['clientTransport'] };
   private _descriptorHash: string;
@@ -47,13 +46,13 @@ export class Client {
   private _descriptorValidated = false;
 
   // Endpoint instances
-  private _endpoints: Map<string, RPCClient | PubSubClient | PushPullClient | SharedObjectClient> =
+  private _endpoints: Map<string, RPCClient | PubSubClient | SharedObjectClient> =
     new Map();
   private _pubSubClients: PubSubClient[] = [];
-  private _pushPullClients: PushPullClient[] = [];
   private _sharedObjectClients: SharedObjectClient[] = [];
 
   constructor(descriptor: Descriptor, options: ClientOptions = {}) {
+    super();
     this._descriptor = descriptor;
     this._options = {
       initTimeout: options.initTimeout ?? 3000,
@@ -66,7 +65,19 @@ export class Client {
     const wsUrl = `ws://${this._baseUrl}/`;
     const transport = this._options.clientTransport ?? new WsClientTransport();
     this._mux = new MuxClient(transport, wsUrl);
-    this._mux.on('heartbeat', (hb: HeartbeatMessage) => this._handleHeartbeat(hb));
+    // Set maxListeners based on endpoint count to avoid spurious warnings.
+    // Each PubSub adds 3 (open, close, error), each SharedObject adds 2 (open, close),
+    // plus Client's own listeners (heartbeat: 1, rawMessage: 1).
+    const listenerCount = this._descriptor.endpoints.reduce((n, ep) => {
+      if (ep.type === 'PubSub') return n + 3;
+      if (ep.type === 'SharedObject') return n + 2;
+      return n;
+    }, 2) + 10; // pad with 10 for headroom
+    this._mux.setMaxListeners(listenerCount);
+    this._mux.on('heartbeat', (hb: HeartbeatFrame) => this._handleHeartbeat(hb));
+    this._mux.on('rawMessage', () => {
+      if (this._lastMessageTime > 0) this._lastMessageTime = Date.now();
+    });
     this._mux.connect();
 
     // Compute descriptor hash for validation
@@ -123,18 +134,6 @@ export class Client {
   }
 
   /**
-   * Get a PushPull endpoint by name.
-   */
-  PP(name: string): PushPullClient {
-    const ep = this._endpoints.get(name);
-    if (!ep) throw new Error(`Unknown endpoint: ${name}`);
-    if (!(ep instanceof PushPullClient)) {
-      throw new Error(`Endpoint "${name}" is ${getClientEndpointType(ep)}, expected PushPull`);
-    }
-    return ep;
-  }
-
-  /**
    * Get a SharedObject endpoint by name.
    */
   SO<T extends object = object>(name: string): SharedObjectClient<T> {
@@ -160,11 +159,6 @@ export class Client {
 
     // Close all PubSub clients
     for (const client of this._pubSubClients) {
-      client.close();
-    }
-
-    // Close all PushPull clients
-    for (const client of this._pushPullClients) {
       client.close();
     }
 
@@ -198,13 +192,6 @@ export class Client {
           break;
         }
 
-        case 'PushPull': {
-          const pushPullClient = new PushPullClient(this._mux, endpoint);
-          this._endpoints.set(endpoint.name, pushPullClient);
-          this._pushPullClients.push(pushPullClient);
-          break;
-        }
-
         case 'SharedObject': {
           const sharedObjClient = new SharedObjectClient(
             this._mux,
@@ -222,7 +209,7 @@ export class Client {
   /**
    * Handle heartbeat message.
    */
-  private _handleHeartbeat(heartbeat: HeartbeatMessage): void {
+  private _handleHeartbeat(heartbeat: HeartbeatFrame): void {
     debug('Received heartbeat (frequencyMs: %d)', heartbeat.frequencyMs);
 
     this._lastMessageTime = Date.now();
@@ -264,11 +251,16 @@ export class Client {
    * Handle heartbeat timeout.
    */
   private _handleHeartbeatTimeout(): void {
+    // Stop further checking — will restart on next heartbeat after reconnect
+    if (this._heartbeatCheckInterval) {
+      clearInterval(this._heartbeatCheckInterval);
+      this._heartbeatCheckInterval = null;
+    }
+    this._heartbeatFrequencyMs = null;
+    this._lastMessageTime = 0;
+
     // Emit disconnected events on all endpoints
     for (const client of this._pubSubClients) {
-      client.emit('disconnected');
-    }
-    for (const client of this._pushPullClients) {
       client.emit('disconnected');
     }
     for (const client of this._sharedObjectClients) {
@@ -294,6 +286,12 @@ export class Client {
       this._descriptorValidated = true;
       debug('Descriptor validated');
     } catch (err) {
+      if (err instanceof DescriptorMismatchError) {
+        this.emit('error', err);
+        this.close();
+        return;
+      }
+      // Transient errors (timeout, connection) are debug-only — will retry on next heartbeat
       debug('Descriptor validation failed: %o', err);
     }
   }

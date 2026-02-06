@@ -12,14 +12,13 @@ import type {
   HeartbeatFrame,
   RpcRequestFrame,
   RpcResponseFrame,
-  ServerToClientFrame,
   SharedObjectInitFrame,
   SharedObjectUpdateFrame,
 } from '../wire.ts';
 
 const debug = createDebug('node-service:mux-server');
 
-type EndpointKind = 'pubsub' | 'pushpull' | 'sharedobject';
+type EndpointKind = 'pubsub' | 'sharedobject';
 
 type PubSubServerTransport<Conn> = ServerTransport<Conn> & {
   subscribe: (conn: Conn, topic: string) => void;
@@ -36,12 +35,6 @@ function isPubSubTransport<Conn>(t: ServerTransport<Conn>): t is PubSubServerTra
   );
 }
 
-interface PushPullQueue<Conn> {
-  clients: Conn[];
-  nextIndex: number;
-  pending: ServerToClientFrame[];
-}
-
 export class MuxServer<Conn> {
   private _transport: ServerTransport<Conn>;
   private _pubsub: PubSubServerTransport<Conn> | null = null;
@@ -51,7 +44,6 @@ export class MuxServer<Conn> {
 
   private _subs = new Map<string, Set<Conn>>();
 
-  private _pushPullQueues = new Map<string, PushPullQueue<Conn>>();
   private _sharedInitHandlers = new Map<string, (conn: Conn) => void>();
 
   private _rpcHandler: ((req: RpcRequestFrame) => Promise<{ err: RpcResponseFrame['err']; res?: any }>) | null = null;
@@ -72,8 +64,14 @@ export class MuxServer<Conn> {
     });
 
     this._transport.onMessage((conn, text) => {
-      // Crash-fast: malformed JSON is a protocol bug.
-      const frame = JSON.parse(text) as ClientToServerFrame;
+      let frame: ClientToServerFrame;
+      try {
+        frame = JSON.parse(text) as ClientToServerFrame;
+      } catch {
+        debug('malformed JSON from client, closing connection');
+        this._transport.closeConnection(conn, 1002, 'Malformed JSON');
+        return;
+      }
       this._handleFrame(conn, frame);
     });
   }
@@ -89,12 +87,6 @@ export class MuxServer<Conn> {
   registerPubSubEndpoint(name: string): void {
     this._kinds.set(name, 'pubsub');
     this._ensureSubs(name);
-  }
-
-  registerPushPullEndpoint(name: string): void {
-    this._kinds.set(name, 'pushpull');
-    this._ensureSubs(name);
-    this._pushPullQueues.set(name, { clients: [], nextIndex: 0, pending: [] });
   }
 
   registerSharedObjectEndpoint(name: string, initHandler: (conn: Conn) => void): void {
@@ -133,31 +125,6 @@ export class MuxServer<Conn> {
     for (const conn of conns) {
       this._transport.send(conn, text);
     }
-  }
-
-  pushToWorker(endpoint: string, frame: EndpointMessageFrame): boolean {
-    const queue = this._pushPullQueues.get(endpoint);
-    if (!queue) {
-      debug('pushpull endpoint not found: %s', endpoint);
-      return false;
-    }
-
-    if (queue.clients.length === 0) {
-      queue.pending.push(frame);
-      debug('no workers for %s, queued (pending=%d)', endpoint, queue.pending.length);
-      return false;
-    }
-
-    const client = queue.clients[queue.nextIndex];
-    if (!client) {
-      debug('no client at index %d for %s', queue.nextIndex, endpoint);
-      return false;
-    }
-    queue.nextIndex = (queue.nextIndex + 1) % queue.clients.length;
-
-    const text = JSON.stringify(frame);
-    this._transport.send(client, text);
-    return true;
   }
 
   private _handleFrame(conn: Conn, frame: ClientToServerFrame): void {
@@ -199,16 +166,6 @@ export class MuxServer<Conn> {
     if (!set.has(conn)) {
       set.add(conn);
     }
-
-    if (kind === 'pushpull') {
-      const queue = this._pushPullQueues.get(endpoint);
-      if (queue) {
-        if (!queue.clients.includes(conn)) {
-          queue.clients.push(conn);
-        }
-        this._flushPending(endpoint);
-      }
-    }
   }
 
   private _handleUnsub(conn: Conn, endpoint: string): void {
@@ -221,21 +178,6 @@ export class MuxServer<Conn> {
 
     const set = this._subs.get(endpoint);
     if (set) set.delete(conn);
-
-    if (kind === 'pushpull') {
-      const queue = this._pushPullQueues.get(endpoint);
-      if (queue) {
-        const idx = queue.clients.indexOf(conn);
-        if (idx !== -1) {
-          queue.clients.splice(idx, 1);
-          if (queue.clients.length > 0) {
-            queue.nextIndex = queue.nextIndex % queue.clients.length;
-          } else {
-            queue.nextIndex = 0;
-          }
-        }
-      }
-    }
   }
 
   private _handleRpc(conn: Conn, req: RpcRequestFrame): void {
@@ -274,26 +216,6 @@ export class MuxServer<Conn> {
       });
   }
 
-  private _flushPending(endpoint: string): void {
-    const queue = this._pushPullQueues.get(endpoint);
-    if (!queue) return;
-    if (queue.clients.length === 0) return;
-
-    while (queue.pending.length > 0 && queue.clients.length > 0) {
-      const frame = queue.pending.shift();
-      if (!frame) continue;
-
-      const client = queue.clients[queue.nextIndex];
-      if (!client) {
-        debug('no client at index %d for %s', queue.nextIndex, endpoint);
-        return;
-      }
-      queue.nextIndex = (queue.nextIndex + 1) % queue.clients.length;
-
-      this._transport.send(client, JSON.stringify(frame));
-    }
-  }
-
   private _ensureSubs(endpoint: string): Set<Conn> {
     let set = this._subs.get(endpoint);
     if (!set) {
@@ -304,25 +226,8 @@ export class MuxServer<Conn> {
   }
 
   private _removeConnFromAllSubs(conn: Conn): void {
-    for (const [endpoint, set] of this._subs.entries()) {
-      if (!set.has(conn)) continue;
+    for (const [, set] of this._subs.entries()) {
       set.delete(conn);
-
-      const kind = this._kinds.get(endpoint);
-      if (kind === 'pushpull') {
-        const queue = this._pushPullQueues.get(endpoint);
-        if (queue) {
-          const idx = queue.clients.indexOf(conn);
-          if (idx !== -1) {
-            queue.clients.splice(idx, 1);
-            if (queue.clients.length > 0) {
-              queue.nextIndex = queue.nextIndex % queue.clients.length;
-            } else {
-              queue.nextIndex = 0;
-            }
-          }
-        }
-      }
     }
   }
 }

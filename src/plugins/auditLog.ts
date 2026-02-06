@@ -5,11 +5,10 @@
 import type { Descriptor } from '../types.ts';
 import type { ServicePlugin } from '../plugins.ts';
 import type { PubSubEndpoint } from '../endpoints/service/PubSubEndpoint.ts';
-import type { PushPullEndpoint } from '../endpoints/service/PushPullEndpoint.ts';
 import type { SharedObjectEndpoint } from '../endpoints/service/SharedObjectEndpoint.ts';
 
 export interface AuditEvent {
-  type: 'rpc' | 'pubsub' | 'pushpull' | 'sharedobject';
+  type: 'rpc' | 'pubsub' | 'sharedobject';
   endpoint: string;
   at: string;
   ok?: boolean;
@@ -128,25 +127,6 @@ export function auditLogPlugin(): ServicePlugin {
               };
               (wrapped as any)[WRAPPED] = true;
               (src as any).send = wrapped;
-            }
-            break;
-          }
-          case 'PushPull': {
-            const pushpull = service.getEndpoint<PushPullEndpoint>(endpoint.name);
-            const original = (pushpull as any).push as (message: unknown) => boolean;
-            if (!(original as any)[WRAPPED]) {
-              const wrapped = function (this: PushPullEndpoint, message: unknown) {
-                const ok = original.call(this, message) as boolean;
-                emit({
-                  type: 'pushpull',
-                  endpoint: endpoint.name,
-                  at: new Date().toISOString(),
-                  queued: !ok,
-                });
-                return ok;
-              };
-              (wrapped as any)[WRAPPED] = true;
-              (pushpull as any).push = wrapped;
             }
             break;
           }

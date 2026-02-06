@@ -89,7 +89,7 @@ describe('SharedObject Pattern', () => {
       service.SO('GameState').data.score = 100;
       service.SO('GameState').notify();
 
-      await delay(100);
+      await waitUntil(() => updates.length >= 1);
 
       assert.strictEqual(updates.length, 1);
       assert.strictEqual(client.SO('GameState').data?.score, 100);
@@ -100,10 +100,57 @@ describe('SharedObject Pattern', () => {
       service.SO('GameState').data.level = 2;
       service.SO('GameState').notify();
 
-      await delay(100);
+      await waitUntil(() => client.SO('GameState').data?.score === 200);
 
       assert.strictEqual(client.SO('GameState').data?.score, 200);
       assert.strictEqual(client.SO('GameState').data?.level, 2);
+    });
+  });
+
+  describe('rawData access', () => {
+    let service: Service;
+    let descriptor: Descriptor;
+
+    before(async () => {
+      descriptor = await createDescriptorAsync({
+        endpoints: [
+          {
+            name: 'RawTest',
+            type: 'SharedObject',
+            objectSchema: {
+              type: 'object',
+              properties: {
+                value: { type: 'number' },
+              },
+            },
+          } as SharedObjectEndpoint,
+        ],
+      });
+      service = new Service(
+        descriptor,
+        {},
+        { RawTest: { value: 42 } }
+      );
+      await service.ready();
+    });
+
+    after(async () => {
+      await service.close();
+      await delay(100);
+    });
+
+    it('should return the unwrapped data object without proxy', () => {
+      const raw = service.SO('RawTest').rawData;
+      assert.strictEqual(raw.value, 42);
+
+      // rawData should be the same underlying object (not proxied)
+      // Modifying rawData should not trigger auto-notify (no proxy tracking)
+      const data = service.SO('RawTest').data;
+      assert.strictEqual(raw.value, data.value);
+
+      // rawData and data should reference the same underlying object
+      raw.value = 99;
+      assert.strictEqual(service.SO('RawTest').rawData.value, 99);
     });
   });
 
@@ -164,7 +211,7 @@ describe('SharedObject Pattern', () => {
       service.SO('State').data.items.push('first');
       service.SO('State').notify();
 
-      await delay(100);
+      await waitUntil(() => updates.length >= 1);
 
       assert.strictEqual(updates.length, 1);
       assert.deepStrictEqual(client.SO('State').data?.items, ['first']);
@@ -178,7 +225,7 @@ describe('SharedObject Pattern', () => {
       service.SO('State').data.nested.value = 42;
       service.SO('State').notify();
 
-      await delay(100);
+      await waitUntil(() => updates.length >= 1);
 
       assert.strictEqual(updates.length, 1);
       assert.strictEqual(client.SO('State').data?.nested.value, 42);
@@ -235,7 +282,7 @@ describe('SharedObject Pattern', () => {
       service.SO('Data').data.a = 10;
       service.SO('Data').notify(['a']);
 
-      await delay(100);
+      await waitUntil(() => updates.length >= 1);
 
       assert.strictEqual(updates.length, 1);
       assert.ok(deltaTouchesKey(updates[0]!, 'a'));
@@ -353,7 +400,7 @@ describe('SharedObject Pattern', () => {
       service.SO('Timed').data.lastUpdate = newDate;
       service.SO('Timed').notify();
 
-      await delay(100);
+      await waitUntil(() => client.SO('Timed').data?.lastUpdate?.toISOString() === '2024-06-15T12:30:00.000Z');
 
       assert.ok(client.SO('Timed').data?.lastUpdate instanceof Date);
       assert.strictEqual(
@@ -367,7 +414,7 @@ describe('SharedObject Pattern', () => {
       service.SO('Timed').data.lastUpdate = newDate;
       service.SO('Timed').notify(['lastUpdate']);
 
-      await delay(100);
+      await waitUntil(() => client.SO('Timed').data?.lastUpdate?.toISOString() === '2024-07-20T08:45:00.000Z');
 
       assert.ok(client.SO('Timed').data?.lastUpdate instanceof Date);
       assert.strictEqual(
@@ -606,7 +653,10 @@ describe('SharedObject Pattern', () => {
       service.SO('Shared').data.counter = 42;
       service.SO('Shared').notify();
 
-      await delay(75);
+      await waitUntil(() =>
+        client1.SO('Shared').data?.counter === 42 &&
+        client2.SO('Shared').data?.counter === 42
+      );
 
       assert.strictEqual(client1.SO('Shared').data?.counter, 42);
       assert.strictEqual(client2.SO('Shared').data?.counter, 42);

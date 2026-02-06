@@ -494,6 +494,56 @@ describe('RPC Pattern', () => {
     });
   });
 
+  describe('Server stack propagation', () => {
+    let service: Service;
+    let client: Client;
+    let descriptor: Descriptor;
+
+    before(async () => {
+      const port = await getAvailablePort();
+      descriptor = createDescriptor(port, {
+        endpoints: [
+          {
+            name: 'throwsError',
+            type: 'RPC',
+            requestSchema: {},
+            replySchema: { type: 'string' },
+          } as RPCEndpoint,
+        ],
+      });
+      service = new Service(
+        descriptor,
+        {
+          throwsError: async () => {
+            throw new Error('Server-side failure');
+          },
+        },
+        {}
+      );
+      await service.ready();
+      client = new Client(descriptor);
+      await delay(50);
+    });
+
+    after(async () => {
+      client.close();
+      await service.close();
+      await delay(50);
+    });
+
+    it('should include serverStack property on client error when handler throws', async () => {
+      await assert.rejects(
+        () => client.RPC('throwsError').call(null),
+        (err: any) => {
+          assert.strictEqual(err.message, 'Server-side failure');
+          assert.ok(typeof err.serverStack === 'string', 'Error should have a serverStack property');
+          assert.ok(err.serverStack.length > 0, 'serverStack should not be empty');
+          return true;
+        }
+      );
+    });
+  });
+
   describe('Service.RPC local invocation', () => {
     it('should call handlers locally with schema validation', async () => {
       const port = await getAvailablePort();

@@ -1,6 +1,7 @@
 /**
  * Plugin utilities.
  */
+import createDebug from 'debug';
 import type {
   ClientOptions,
   Descriptor,
@@ -12,6 +13,8 @@ import type {
 } from './types.ts';
 import { Service } from './Service.ts';
 import { Client } from './Client.ts';
+
+const debug = createDebug('node-service:plugins');
 
 /**
  * Plugin definition for extending a service spec.
@@ -139,9 +142,7 @@ export function createService(
     if (plugin.onServiceReady) {
       service.ready()
         .then(() => plugin.onServiceReady!(service, spec.descriptor))
-        .catch(() => {
-          // Ignore plugin errors on startup; Service.ready() will surface its own errors.
-        });
+        .catch((err) => debug('Plugin "%s" onServiceReady error: %o', plugin.name, err));
     }
   }
 

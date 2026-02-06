@@ -234,12 +234,23 @@ export function compileSchema<T = any>(schema: JSONSchema): CompiledValidator<T>
   };
 }
 
+const schemaCache = new WeakMap<JSONSchema, CompiledValidator>();
+
+function getOrCompile<T = any>(schema: JSONSchema): CompiledValidator<T> {
+  let cached = schemaCache.get(schema);
+  if (!cached) {
+    cached = compileSchema(schema);
+    schemaCache.set(schema, cached);
+  }
+  return cached as CompiledValidator<T>;
+}
+
 /**
  * Validate a value against a schema without pre-compilation.
  * Use compileSchema for repeated validation of the same schema.
  */
 export function validate<T = any>(schema: JSONSchema, value: unknown): T {
-  const validator = compileSchema<T>(schema);
+  const validator = getOrCompile<T>(schema);
   return validator.validate(value);
 }
 
@@ -247,7 +258,7 @@ export function validate<T = any>(schema: JSONSchema, value: unknown): T {
  * Validate and parse dates in a value.
  */
 export function validateAndParseDates<T = any>(schema: JSONSchema, value: unknown): T {
-  const validator = compileSchema<T>(schema);
+  const validator = getOrCompile<T>(schema);
   return validator.validateAndParseDates(value);
 }
 
@@ -255,7 +266,7 @@ export function validateAndParseDates<T = any>(schema: JSONSchema, value: unknow
  * Check if a value matches a schema.
  */
 export function isValid(schema: JSONSchema, value: unknown): boolean {
-  const validator = compileSchema(schema);
+  const validator = getOrCompile(schema);
   return validator.check(value);
 }
 
@@ -435,7 +446,7 @@ export function getSubSchemaInfo(
   rootSchema: JSONSchema,
   path: (string | number)[]
 ): CachedSubSchema | null {
-  const pathKey = path.join('|');
+  const pathKey = JSON.stringify(path);
 
   // Check cache
   const cached = getCachedSubSchema(rootSchema, pathKey);

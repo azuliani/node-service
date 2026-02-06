@@ -50,7 +50,7 @@ export class RPCClient {
     timeout = 10000
   ): Promise<TOutput> {
     // Serialize dates before validation/transport
-    const serializedInput = serializeDates(input);
+    const serializedInput = this._requestValidator.hasDates ? serializeDates(input) : input;
     this._requestValidator.validate(serializedInput);
 
     debug('RPC call to %s', this._name);

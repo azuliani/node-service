@@ -47,6 +47,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
 
   // Init timeout timer
   private _initTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private _initRetryCount = 0;
 
   // Timing tracking
   private _latencies: number[] = [];
@@ -210,6 +211,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
    */
   private _handleInit(message: SharedObjectInitFrame): void {
     this._clearInitTimeout();
+    this._initRetryCount = 0;
 
     this._data = this._validator.validateAndParseDates(message.data) as T;
     this._dataProxy = null; // Invalidate proxy.
@@ -284,6 +286,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
    */
   private _handleDisconnectInternal(): void {
     this._clearInitTimeout();
+    this._initRetryCount = 0;
     this._reset(null);
   }
 
@@ -292,13 +295,25 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
    */
   private _startInitTimeout(): void {
     this._clearInitTimeout();
+
+    const maxRetries = 5;
+    if (this._initRetryCount >= maxRetries) {
+      const err = new Error(`SharedObject "${this._name}" init failed after ${maxRetries} retries`);
+      this.emit('error', err);
+      this._rejectInitPromise(err);
+      return;
+    }
+
+    const backoff = Math.min(this._initTimeout * Math.pow(2, this._initRetryCount), 30000);
+    this._initRetryCount++;
+
     this._initTimeoutTimer = setTimeout(() => {
       if (!this._ready && this._subscribed) {
-        debug('Init timeout for %s, resubscribing', this._name);
+        debug('Init timeout for %s (retry %d), resubscribing', this._name, this._initRetryCount);
         this._mux.resubscribe(this._name);
         this._startInitTimeout();
       }
-    }, this._initTimeout);
+    }, backoff);
   }
 
   /**
