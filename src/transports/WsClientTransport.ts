@@ -150,6 +150,7 @@ export class WsClientTransport implements ClientTransport {
         this._doConnect().catch((err) => debug('Reconnect failed: %o', err));
       }
     }, delay);
+    this._reconnectTimer.unref();
   }
 
   send(text: string): void {

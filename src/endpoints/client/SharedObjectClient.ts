@@ -314,6 +314,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
         this._startInitTimeout();
       }
     }, backoff);
+    this._initTimeoutTimer.unref();
   }
 
   /**
@@ -379,6 +380,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
         this._latencies = [];
       }
     }, 5000);
+    this._timingInterval!.unref();
   }
 
   /**

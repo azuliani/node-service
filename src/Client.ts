@@ -245,6 +245,7 @@ export class Client extends EventEmitter {
         this._handleHeartbeatTimeout();
       }
     }, checkInterval);
+    this._heartbeatCheckInterval!.unref();
   }
 
   /**

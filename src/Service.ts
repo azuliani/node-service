@@ -391,6 +391,7 @@ export class Service {
 
     // Schedule recurring heartbeats
     this._heartbeatInterval = setInterval(sendHeartbeat, this._options.heartbeatMs);
+    this._heartbeatInterval.unref();
   }
 }
 

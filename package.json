@@ -28,9 +28,9 @@
     "node": ">=23.6.0"
   },
   "scripts": {
-    "test": "node --test --test-force-exit --test-concurrency=1",
-    "test:watch": "node --test --watch --test-force-exit",
-    "test:coverage": "node --test --test-force-exit --test-concurrency=1 --experimental-test-coverage",
+    "test": "node --test --test-concurrency=1",
+    "test:watch": "node --test --watch",
+    "test:coverage": "node --test --test-concurrency=1 --experimental-test-coverage",
     "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\"",
     "build": "npm run clean && npm run build:types && npm run build:esm && npm run build:cjs",
