@@ -25,8 +25,8 @@ import type { Descriptor, RPCEndpoint } from '@azuliani/node-service';
 
 const descriptor: Descriptor = {
   transport: {
-    server: '127.0.0.1:3000', // bind address
-    client: '127.0.0.1:3000', // client connects to ws://{client}/
+    server: { host: '127.0.0.1', port: 3000 }, // bind address
+    client: { host: '127.0.0.1', port: 3000 }, // client connects to ws://{host}:{port}/
   },
   endpoints: [
     {
@@ -73,7 +73,7 @@ const { Client, Service } = require('@azuliani/node-service');
 
 ## Patterns
 
-All patterns share one WebSocket per client at `ws://{descriptor.transport.client}/`.
+All patterns share one WebSocket per client at `ws://{descriptor.transport.client.host}:{descriptor.transport.client.port}/`.
 
 ### PubSub
 
@@ -89,7 +89,10 @@ import { Client, Service } from '@azuliani/node-service';
 import type { Descriptor, SharedObjectEndpoint } from '@azuliani/node-service';
 
 const descriptor: Descriptor = {
-  transport: { server: '127.0.0.1:3001', client: '127.0.0.1:3001' },
+  transport: {
+    server: { host: '127.0.0.1', port: 3001 },
+    client: { host: '127.0.0.1', port: 3001 },
+  },
   endpoints: [
     {
       name: 'Counter',
@@ -133,7 +136,10 @@ import {
 import type { RPCEndpoint } from '@azuliani/node-service';
 
 const spec = defineServiceSpec({
-  transport: { server: '0.0.0.0:3000', client: '127.0.0.1:3000' },
+  transport: {
+    server: { host: '0.0.0.0', port: 3000 },
+    client: { host: '127.0.0.1', port: 3000 },
+  },
   endpoints: [
     {
       name: 'greet',

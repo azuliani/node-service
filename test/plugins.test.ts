@@ -17,8 +17,8 @@ describe('Plugins', () => {
       const port = await getAvailablePort();
       const spec = defineServiceSpec({
         transport: {
-          server: `127.0.0.1:${port}`,
-          client: `127.0.0.1:${port}`,
+          server: { host: '127.0.0.1', port },
+          client: { host: '127.0.0.1', port },
         },
         endpoints: [],
         plugins: [healthPlugin()],
@@ -63,8 +63,8 @@ describe('Plugins', () => {
       const port = await getAvailablePort();
       const spec = defineServiceSpec({
         transport: {
-          server: `127.0.0.1:${port}`,
-          client: `127.0.0.1:${port}`,
+          server: { host: '127.0.0.1', port },
+          client: { host: '127.0.0.1', port },
         },
         endpoints: [
           {
@@ -114,8 +114,8 @@ describe('Plugins', () => {
 
       const spec = defineServiceSpec({
         transport: {
-          server: `127.0.0.1:${port}`,
-          client: `127.0.0.1:${port}`,
+          server: { host: '127.0.0.1', port },
+          client: { host: '127.0.0.1', port },
         },
         endpoints: [
           {
@@ -154,8 +154,8 @@ describe('Plugins', () => {
       const port = await getAvailablePort();
       const spec = defineServiceSpec({
         transport: {
-          server: `127.0.0.1:${port}`,
-          client: `127.0.0.1:${port}`,
+          server: { host: '127.0.0.1', port },
+          client: { host: '127.0.0.1', port },
         },
         endpoints: [
           {

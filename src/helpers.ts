@@ -4,7 +4,7 @@
 
 import { createHash } from 'crypto';
 import type { EventEmitter } from 'events';
-import type { Endpoint } from './types.ts';
+import type { ConnectionConfig, Endpoint } from './types.ts';
 
 /**
  * Wait for an event to be emitted on an EventEmitter.
@@ -45,25 +45,33 @@ export function delay(ms: number): Promise<void> {
 }
 
 /**
- * Parse host and port from a URL string.
- * Accepts formats: "host:port", "0.0.0.0:3000", "localhost:3000"
+ * Validate a transport connection config object at runtime.
  *
- * @param url - URL in format "host:port"
- * @returns Object with host and port
+ * @param value - Candidate value
+ * @param fieldName - Logical field path for clear error messages
+ * @returns Normalized connection config
  */
-export function parseHostPort(url: string): { host: string; port: number } {
-  const parts = url.split(':');
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error(`Invalid URL format: ${url}. Expected "host:port"`);
+export function validateConnectionConfig(value: unknown, fieldName: string): ConnectionConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an object with host and port`);
   }
-  const host = parts[0];
-  const port = parseInt(parts[1], 10);
-  if (isNaN(port)) {
-    throw new Error(`Invalid port in URL: ${url}`);
+
+  const candidate = value as Partial<ConnectionConfig>;
+
+  if (typeof candidate.host !== 'string' || candidate.host.trim() === '') {
+    throw new Error(`${fieldName}.host must be a non-empty string`);
   }
+  const host = candidate.host;
+
+  const port = candidate.port;
+  if (typeof port !== 'number' || !Number.isInteger(port)) {
+    throw new Error(`${fieldName}.port must be an integer`);
+  }
+
   if (port < 1 || port > 65535) {
-    throw new Error(`Port out of range (1-65535) in URL: ${url}`);
+    throw new Error(`${fieldName}.port must be between 1 and 65535`);
   }
+
   return { host, port };
 }
 

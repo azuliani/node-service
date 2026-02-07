@@ -102,7 +102,7 @@ src/
 ├── types.ts              # Descriptor, Endpoint, Options, Diff types
 ├── errors.ts             # Error classes
 ├── validation.ts         # TypeBox validation utilities
-├── helpers.ts            # waitFor, delay, parseHostPort
+├── helpers.ts            # waitFor, delay, validateConnectionConfig
 ├── Service.ts            # Service class
 ├── Client.ts             # Client class
 ├── mux/
@@ -133,7 +133,10 @@ Both Service and Client use the same descriptor:
 
 ```typescript
 interface Descriptor {
-  transport: { client: string; server: string };
+  transport: {
+    client: { host: string; port: number };
+    server: { host: string; port: number };
+  };
   endpoints: Endpoint[];
 }
 
@@ -153,12 +156,12 @@ first, and handle `'disconnected'` by treating the SharedObject as unavailable u
 When `autoNotify` is enabled (default), the Service batches changes automatically. Calling
 `service.SO('MySharedObject').notify()` manually in this mode still works, but prints a warning.
 
-**Transport URLs:**
-- `client`: Base URL for client connections (e.g., `"localhost:3000"`)
-- `server`: Bind address for server (e.g., `"0.0.0.0:3000"`)
+**Transport connection objects:**
+- `client`: Client connection target (e.g., `{ host: "localhost", port: 3000 }`)
+- `server`: Server bind address (e.g., `{ host: "0.0.0.0", port: 3000 }`)
 
 **WebSocket URL:**
-- Single connection for all endpoints: `ws://{url}/`
+- Single connection for all endpoints: `ws://{host}:{port}/`
 
 **Routing:**
 - Client subscribes/unsubscribes to endpoints by sending `{ type: "sub" | "unsub", endpoint: string }`
@@ -501,7 +504,7 @@ Client transport uses `ws` and supports auto-reconnect. It passes raw text frame
 ```typescript
 function waitFor(emitter: EventEmitter, event: string, timeout?: number): Promise<any>
 function delay(ms: number): Promise<void>
-function parseHostPort(url: string): { host: string; port: number }
+function validateConnectionConfig(value: unknown, fieldName: string): { host: string; port: number }
 ```
 
 ## 15. Test Requirements

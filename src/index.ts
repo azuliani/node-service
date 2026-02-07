@@ -15,7 +15,10 @@
  * import type { Descriptor, RPCEndpoint } from '@azuliani/node-service';
  *
  * const descriptor: Descriptor = {
- *   transport: { server: '127.0.0.1:3000', client: '127.0.0.1:3000' },
+ *   transport: {
+ *     server: { host: '127.0.0.1', port: 3000 },
+ *     client: { host: '127.0.0.1', port: 3000 },
+ *   },
  *   endpoints: [
  *     {
  *       name: 'greet',
@@ -42,7 +45,10 @@
  * import type { Descriptor, SharedObjectEndpoint } from '@azuliani/node-service';
  *
  * const descriptor: Descriptor = {
- *   transport: { server: '127.0.0.1:3001', client: '127.0.0.1:3001' },
+ *   transport: {
+ *     server: { host: '127.0.0.1', port: 3001 },
+ *     client: { host: '127.0.0.1', port: 3001 },
+ *   },
  *   endpoints: [
  *     {
  *       name: 'Counter',
@@ -80,6 +86,7 @@ export { ErrorCode, hasErrorCode, getErrorCode } from './errors.ts';
 export type {
   Diff,
   JSONSchema,
+  ConnectionConfig,
   TransportConfig,
   Descriptor,
   Endpoint,

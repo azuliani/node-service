@@ -18,8 +18,8 @@ async function main() {
   //    Both Service and Client use the same descriptor
   const descriptor = {
     transport: {
-      server: '127.0.0.1:3000',
-      client: '127.0.0.1:3000',
+      server: { host: '127.0.0.1', port: 3000 },
+      client: { host: '127.0.0.1', port: 3000 },
     },
     endpoints: [
       {

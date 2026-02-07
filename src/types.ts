@@ -41,15 +41,25 @@ export interface JSONSchema {
 }
 
 /**
+ * Transport connection config.
+ * - `host`: Hostname or IP
+ * - `port`: TCP port
+ */
+export interface ConnectionConfig {
+  host: string;
+  port: number;
+}
+
+/**
  * Transport configuration.
- * - `client`: Base URL for client connections (e.g., "localhost:3000")
- * - `server`: Bind address for server (e.g., "0.0.0.0:3000")
+ * - `client`: Client connection target (e.g., `{ host: "localhost", port: 3000 }`)
+ * - `server`: Server bind address (e.g., `{ host: "0.0.0.0", port: 3000 }`)
  *
- * All patterns use a single WebSocket connection at `ws://{client}/`.
+ * All patterns use a single WebSocket connection at `ws://{host}:{port}/`.
  */
 export interface TransportConfig {
-  client: string;
-  server: string;
+  client: ConnectionConfig;
+  server: ConnectionConfig;
 }
 
 /**

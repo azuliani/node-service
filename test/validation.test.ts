@@ -347,15 +347,15 @@ describe('Helpers', () => {
     it('should create descriptor with transport', () => {
       const desc = createDescriptor(5000);
       assert.ok(desc.transport);
-      assert.strictEqual(desc.transport.server, '127.0.0.1:5000');
-      assert.strictEqual(desc.transport.client, '127.0.0.1:5000');
+      assert.deepStrictEqual(desc.transport.server, { host: '127.0.0.1', port: 5000 });
+      assert.deepStrictEqual(desc.transport.client, { host: '127.0.0.1', port: 5000 });
     });
 
     it('should create descriptor with default port', () => {
       const desc = createDescriptor(3000);
       assert.ok(desc.transport);
-      assert.strictEqual(desc.transport.server, '127.0.0.1:3000');
-      assert.strictEqual(desc.transport.client, '127.0.0.1:3000');
+      assert.deepStrictEqual(desc.transport.server, { host: '127.0.0.1', port: 3000 });
+      assert.deepStrictEqual(desc.transport.client, { host: '127.0.0.1', port: 3000 });
     });
 
     it('should include provided endpoints', () => {
@@ -369,53 +369,80 @@ describe('Helpers', () => {
 
     it('should use custom hostname', () => {
       const desc = createDescriptor(5000, { hostname: 'localhost' });
-      assert.ok(desc.transport.server.includes('localhost'));
+      assert.strictEqual(desc.transport.server.host, 'localhost');
     });
   });
 
-  describe('parseHostPort', async () => {
-    const { parseHostPort } = await import('../src/helpers.ts');
+  describe('validateConnectionConfig', async () => {
+    const { validateConnectionConfig } = await import('../src/helpers.ts');
 
-    it('should parse host and port from simple format', () => {
-      const result = parseHostPort('127.0.0.1:5000');
+    it('should accept a valid connection object', () => {
+      const result = validateConnectionConfig(
+        { host: '127.0.0.1', port: 5000 },
+        'transport.server'
+      );
       assert.strictEqual(result.host, '127.0.0.1');
       assert.strictEqual(result.port, 5000);
     });
 
-    it('should parse localhost', () => {
-      const result = parseHostPort('localhost:3000');
-      assert.strictEqual(result.host, 'localhost');
-      assert.strictEqual(result.port, 3000);
+    it('should reject missing host', () => {
+      assert.throws(
+        () => validateConnectionConfig({ port: 5000 }, 'transport.server'),
+        /transport\.server\.host must be a non-empty string/
+      );
     });
 
-    it('should throw on invalid format', () => {
-      assert.throws(() => parseHostPort('invalid'), /Invalid URL format/);
+    it('should reject non-string host', () => {
+      assert.throws(
+        () => validateConnectionConfig({ host: 123, port: 5000 }, 'transport.server'),
+        /transport\.server\.host must be a non-empty string/
+      );
     });
 
-    it('should throw on invalid port', () => {
-      assert.throws(() => parseHostPort('localhost:abc'), /Invalid port/);
+    it('should reject missing port', () => {
+      assert.throws(
+        () => validateConnectionConfig({ host: 'localhost' }, 'transport.server'),
+        /transport\.server\.port must be an integer/
+      );
     });
 
-    it('should reject port 0', () => {
-      assert.throws(() => parseHostPort('localhost:0'), /Port out of range/);
+    it('should reject non-integer port', () => {
+      assert.throws(
+        () => validateConnectionConfig({ host: 'localhost', port: 123.5 }, 'transport.server'),
+        /transport\.server\.port must be an integer/
+      );
     });
 
-    it('should reject negative port', () => {
-      assert.throws(() => parseHostPort('localhost:-1'), /Port out of range/);
+    it('should reject port below range', () => {
+      assert.throws(
+        () => validateConnectionConfig({ host: 'localhost', port: 0 }, 'transport.server'),
+        /transport\.server\.port must be between 1 and 65535/
+      );
     });
 
-    it('should reject port above 65535', () => {
-      assert.throws(() => parseHostPort('localhost:70000'), /Port out of range/);
+    it('should reject port above range', () => {
+      assert.throws(
+        () => validateConnectionConfig({ host: 'localhost', port: 70000 }, 'transport.server'),
+        /transport\.server\.port must be between 1 and 65535/
+      );
     });
 
-    it('should accept port 1', () => {
-      const result = parseHostPort('localhost:1');
-      assert.strictEqual(result.port, 1);
+    it('should reject legacy host:port strings', () => {
+      assert.throws(
+        () => validateConnectionConfig('localhost:3000', 'transport.server'),
+        /transport\.server must be an object with host and port/
+      );
     });
 
-    it('should accept port 65535', () => {
-      const result = parseHostPort('localhost:65535');
-      assert.strictEqual(result.port, 65535);
+    it('should accept boundary ports', () => {
+      assert.strictEqual(
+        validateConnectionConfig({ host: 'localhost', port: 1 }, 'transport.server').port,
+        1
+      );
+      assert.strictEqual(
+        validateConnectionConfig({ host: 'localhost', port: 65535 }, 'transport.server').port,
+        65535
+      );
     });
   });
 

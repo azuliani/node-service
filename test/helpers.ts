@@ -15,19 +15,19 @@ export interface CreateDescriptorOptions {
 }
 
 /**
- * Create a descriptor for testing with the URL-based transport.
+ * Create a descriptor for testing with object-based transport config.
  *
  * @param port - Port number for the server
  * @param options - Endpoint options
- * @returns A Descriptor configured with the URL transport
+ * @returns A Descriptor configured with transport connection objects
  */
 export function createDescriptor(port: number, options: CreateDescriptorOptions = {}): Descriptor {
   const { endpoints = [], hostname = '127.0.0.1' } = options;
 
   return {
     transport: {
-      server: `${hostname}:${port}`,
-      client: `${hostname}:${port}`,
+      server: { host: hostname, port },
+      client: { host: hostname, port },
     },
     endpoints,
   };
@@ -54,7 +54,7 @@ export async function getAvailablePort(): Promise<number> {
  * Create a descriptor for testing with a dynamically allocated port.
  *
  * @param options - Endpoint options
- * @returns A Descriptor configured with the URL transport and a unique port
+ * @returns A Descriptor configured with transport connection objects and a unique port
  */
 export async function createDescriptorAsync(
   options: CreateDescriptorOptions = {}

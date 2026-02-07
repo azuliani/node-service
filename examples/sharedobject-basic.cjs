@@ -20,8 +20,8 @@ async function main() {
   //    Server sends init message immediately when client connects.
   const descriptor = {
     transport: {
-      server: '127.0.0.1:3001',
-      client: '127.0.0.1:3001',
+      server: { host: '127.0.0.1', port: 3001 },
+      client: { host: '127.0.0.1', port: 3001 },
     },
     endpoints: [
       {

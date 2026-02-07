@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test helpers (waitFor, delay, createDescriptor)
 
 ### Changed
+- **Breaking:** Descriptor transport config now requires objects: `transport.server` and `transport.client` must be `{ host, port }` (legacy `"host:port"` strings removed)
 - RPC now runs over the shared WebSocket connection (no HTTP transport)
 - PubSub/PushPull/SharedObject now share a single connection and use `sub`/`unsub` frames for routing
 - Endpoint access now uses explicit getters (`client.RPC('Name')`, `client.PS('Name')`, `client.PP('Name')`, `client.SO('Name')`); removed dynamic `client.Name` / `service.Name` properties

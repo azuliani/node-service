@@ -15,11 +15,25 @@ import {
   waitUntil,
 } from './helpers.ts';
 import type {
+  ClientTransport,
   Descriptor,
   PubSubEndpoint,
   RPCEndpoint,
   SharedObjectEndpoint,
 } from '../src/index.ts';
+
+class NoopTransport implements ClientTransport {
+  get connected(): boolean {
+    return false;
+  }
+  onOpen(_cb: () => void): void {}
+  onClose(_cb: (code: number, reason: string) => void): void {}
+  onError(_cb: (err: Error) => void): void {}
+  onMessage(_cb: (text: string) => void): void {}
+  async connect(_url: string): Promise<void> {}
+  send(_text: string): void {}
+  close(): void {}
+}
 
 describe('Integration Tests', () => {
   describe('Descriptor validation', () => {
@@ -66,7 +80,7 @@ describe('Integration Tests', () => {
     it('should detect descriptor mismatch', async () => {
       // Create a client with a mismatched descriptor that connects to the same server
       const mismatchedDescriptor: Descriptor = createDescriptor(
-        parseInt(descriptor.transport.client.split(':')[1], 10),
+        descriptor.transport.client.port,
         {
           endpoints: [
             {
@@ -417,6 +431,38 @@ describe('Integration Tests', () => {
   });
 
   describe('Transport error handling', () => {
+    it('should reject legacy host:port server string transport config', async () => {
+      const port = await getAvailablePort();
+      const descriptor = {
+        transport: {
+          server: `127.0.0.1:${port}`,
+          client: { host: '127.0.0.1', port },
+        },
+        endpoints: [],
+      } as unknown as Descriptor;
+
+      assert.throws(
+        () => new Service(descriptor, {}, {}),
+        /transport\.server must be an object with host and port/
+      );
+    });
+
+    it('should reject legacy host:port client string transport config', async () => {
+      const port = await getAvailablePort();
+      const descriptor = {
+        transport: {
+          server: { host: '127.0.0.1', port },
+          client: `127.0.0.1:${port}`,
+        },
+        endpoints: [],
+      } as unknown as Descriptor;
+
+      assert.throws(
+        () => new Client(descriptor, { clientTransport: new NoopTransport() }),
+        /transport\.client must be an object with host and port/
+      );
+    });
+
     it('should throw when SharedObject lacks source transport', async () => {
       const port = await getAvailablePort();
       // In the new architecture, there's no separate source transport

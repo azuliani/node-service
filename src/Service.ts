@@ -7,7 +7,7 @@
 import createDebug from 'debug';
 import { MissingHandlerError, TimeoutError, UnknownEndpointError, getErrorCode } from './errors.ts';
 import { compileSchema, serializeDates } from './validation.ts';
-import { parseHostPort, computeEndpointsHash } from './helpers.ts';
+import { validateConnectionConfig, computeEndpointsHash } from './helpers.ts';
 import type { CompiledValidator } from './validation.ts';
 import type {
   Descriptor,
@@ -74,6 +74,10 @@ export class Service {
       heartbeatMs: options.heartbeatMs ?? 5000,
       ...(options.serverTransport ? { serverTransport: options.serverTransport } : {}),
     };
+
+    // Validate both sides up front so invalid descriptor transport shape fails immediately.
+    validateConnectionConfig(this._descriptor.transport.client, 'transport.client');
+    validateConnectionConfig(this._descriptor.transport.server, 'transport.server');
 
     // Create ready promise
     this._readyPromise = new Promise((resolve, reject) => {
@@ -263,7 +267,7 @@ export class Service {
    * Initialize transport + mux.
    */
   private async _initTransports(): Promise<void> {
-    const { host, port } = parseHostPort(this._descriptor.transport.server);
+    const { host, port } = this._descriptor.transport.server;
 
     const transport = this._options.serverTransport ?? new UwsServerTransport();
     this._transport = transport as ServerTransport<any>;

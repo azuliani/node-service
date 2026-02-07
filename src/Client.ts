@@ -7,8 +7,9 @@
 import { EventEmitter } from 'events';
 import createDebug from 'debug';
 import { DescriptorMismatchError } from './errors.ts';
-import { computeEndpointsHash } from './helpers.ts';
+import { computeEndpointsHash, validateConnectionConfig } from './helpers.ts';
 import type {
+  ConnectionConfig,
   Descriptor,
   ClientOptions,
 } from './types.ts';
@@ -36,7 +37,7 @@ export class Client extends EventEmitter {
   private _descriptor: Descriptor;
   private _options: { initTimeout: number; clientTransport?: ClientOptions['clientTransport'] };
   private _descriptorHash: string;
-  private _baseUrl: string;
+  private _connection: ConnectionConfig;
   private _mux: MuxClient;
 
   // Heartbeat
@@ -59,10 +60,11 @@ export class Client extends EventEmitter {
       ...(options.clientTransport ? { clientTransport: options.clientTransport } : {}),
     };
 
-    // Get base URL from descriptor
-    this._baseUrl = descriptor.transport.client;
+    // Validate both sides to enforce descriptor transport shape at runtime.
+    validateConnectionConfig(descriptor.transport.server, 'transport.server');
+    this._connection = validateConnectionConfig(descriptor.transport.client, 'transport.client');
 
-    const wsUrl = `ws://${this._baseUrl}/`;
+    const wsUrl = `ws://${this._connection.host}:${this._connection.port}/`;
     const transport = this._options.clientTransport ?? new WsClientTransport();
     this._mux = new MuxClient(transport, wsUrl);
     // Set maxListeners based on endpoint count to avoid spurious warnings.
