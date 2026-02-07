@@ -1063,6 +1063,26 @@ describe('SharedObject Pattern', () => {
       assert.strictEqual(updates.length, 1, 'Should receive update with hint');
       assert.strictEqual(client.SO('ManualNotify').data?.count, 200);
     });
+
+    it('should allow deleting optional properties with hint in manual mode', async () => {
+      const updates: Diff[] = [];
+      client.SO('ManualNotify').removeAllListeners('update');
+      client.SO('ManualNotify').on('update', (delta: Diff) => updates.push(delta));
+
+      // "name" is optional in schema (not listed in required), so deleting it should be valid.
+      delete (service.SO('ManualNotify').data as any).name;
+
+      assert.doesNotThrow(() => {
+        service.SO('ManualNotify').notify(['name']);
+      });
+
+      await waitUntil(() => updates.length >= 1);
+
+      assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(client.SO('ManualNotify').data as object, 'name'),
+        false
+      );
+    });
   });
 
   describe('Disconnect handling', () => {

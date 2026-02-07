@@ -165,61 +165,10 @@ export class SharedObjectEndpoint<T extends object = object> {
       );
     }
 
-    let delta: Diff | null;
-
-    if (hint && hint.length > 0) {
-      // OPTIMIZATION: Only validate the changed subtree
-      const currentValue = getAtPath(this._data, hint);
-
-      // Use cached sub-schema info (fast-path for primitives)
-      const subSchemaInfo = getSubSchemaInfo(this._schema, hint);
-      if (subSchemaInfo) {
-        if (subSchemaInfo.isPrimitive) {
-          // Fast typeof check for primitives
-          validatePrimitive(currentValue, subSchemaInfo.schema);
-        } else if (subSchemaInfo.validator) {
-          // Use compiled TypeBox validator for complex types
-          // If schema contains date formats, serialize Date objects before validation.
-          const valueToValidate = subSchemaInfo.validator.hasDates
-            ? serializeDates(currentValue)
-            : currentValue;
-          subSchemaInfo.validator.validate(valueToValidate);
-        }
-      }
-
-      delta = this._computeDeltaForPath(hint);
-    } else {
-      // No hint: full validation and full diff
-      // Note: serializeDates is needed here because TypeBox validates type: "string"
-      // before checking format: "date-time", and Date objects fail the string type check.
-      const serialized = this._validator.hasDates ? serializeDates(this._data) : this._data;
-      this._validator.validate(serialized);
-
-      delta = this._computeDeltaForPath([]);
-    }
-
-    if (!delta || delta.length === 0) {
-      debug('No changes detected for %s%s', this._name, hint && hint.length > 0 ? ` (hint: ${hint.join('.')})` : '');
-      return;
-    }
-
-    // Increment version
-    this._version++;
-
-    debug('Broadcasting delta (%d entries) for %s (v%d)', delta.length, this._name, this._version);
-
-    // Update snapshot incrementally by applying the delta
-    applyDelta(this._lastSnapshot as unknown as Record<string, unknown>, delta);
-
-    // Broadcast to all connected clients
-    const update: SharedObjectUpdateFrame = {
-      endpoint: this._name,
-      type: 'update',
-      delta,
-      v: this._version,
-      now: new Date().toISOString(),
-    };
-    this._mux.broadcast(this._name, update);
+    const paths = hint && hint.length > 0
+      ? [hint as (string | number)[]]
+      : [[] as (string | number)[]];
+    this._publishFromPaths(paths);
   }
 
   /**
@@ -249,101 +198,96 @@ export class SharedObjectEndpoint<T extends object = object> {
     this._notifyScheduled = false;
     if (this._pendingPaths.isEmpty()) return;
 
-    // 1. Get merged paths (shortest first) and clear tree
+    // Get merged paths (shortest first) and clear tree.
     const paths = this._pendingPaths.getPaths();
     this._pendingPaths.clear();
+    this._publishFromPaths(paths);
+  }
 
-    // 2. Collect all delta entries
+  private _publishFromPaths(paths: (string | number)[][]): void {
     const allDelta: Diff = [];
-
-    // Save snapshot backup for rollback on error
     const snapshotBackup = copy(this._lastSnapshot);
 
     try {
       for (const path of paths) {
-        // 3a. Get current and snapshot values at path
-        const currentValue = getAtPath(this._data, path);
+        this._validatePath(path);
 
-        // 3b. Validate subtree (skip for deleted properties - undefined values)
-        if (path.length > 0 && currentValue !== undefined) {
-          const subSchemaInfo = getSubSchemaInfo(this._schema, path);
-          if (subSchemaInfo) {
-            // Date format fields need special handling - validate Date objects directly
-            if (subSchemaInfo.dateFormat) {
-              // For date formats, accept Date objects or valid date strings
-              if (currentValue instanceof Date) {
-                if (isNaN(currentValue.getTime())) {
-                  throw new ValidationError(`: Invalid ${subSchemaInfo.dateFormat} value`);
-                }
-              } else if (typeof currentValue === 'string') {
-                if (isNaN(Date.parse(currentValue))) {
-                  throw new ValidationError(`: Invalid ${subSchemaInfo.dateFormat} format`);
-                }
-              } else {
-                throw new ValidationError(`: Expected Date or string for ${subSchemaInfo.dateFormat}`);
-              }
-            } else if (subSchemaInfo.isPrimitive) {
-              // Fast path for non-date primitives
-              validatePrimitive(currentValue, subSchemaInfo.schema);
-            } else if (subSchemaInfo.validator) {
-              // Complex types use compiled validator
-              const valueToValidate = subSchemaInfo.validator.hasDates
-                ? serializeDates(currentValue)
-                : currentValue;
-              subSchemaInfo.validator.validate(valueToValidate);
-            }
-          }
-        } else if (path.length === 0) {
-          // Empty path = root change, do full validation
-          // Note: serializeDates is needed here because TypeBox validates type: "string"
-          // before checking format: "date-time", and Date objects fail the string type check.
-          const serialized = this._validator.hasDates ? serializeDates(this._data) : this._data;
-          this._validator.validate(serialized);
-        }
-
-        // 3c. Compute delta for this path
         const pathDelta = this._computeDeltaForPath(path);
-
         if (!pathDelta || pathDelta.length === 0) {
-          continue; // No changes at this path
+          continue;
         }
 
-        // 3d. Apply delta to snapshot IMMEDIATELY (before next path)
+        // Keep snapshot in sync incrementally as we process multiple paths.
         applyDelta(this._lastSnapshot as unknown as Record<string, unknown>, pathDelta);
-
-        // 3e. Collect
         allDelta.push(...pathDelta);
       }
     } catch (err) {
-      // Restore snapshot on error to maintain consistency
       this._lastSnapshot = snapshotBackup;
       throw err;
     }
 
-    // 4. If no delta entries, nothing to broadcast
     if (allDelta.length === 0) {
-      debug('No changes detected for %s (batched)', this._name);
+      debug('No changes detected for %s', this._name);
       return;
     }
 
-    // 5. Increment version ONCE
     this._version++;
+    debug('Broadcasting delta (%d entries) for %s (v%d)', allDelta.length, this._name, this._version);
 
-    debug(
-      'Broadcasting delta (%d entries) for %s (v%d, batched)',
-      allDelta.length,
-      this._name,
-      this._version
-    );
-
-    // 6. Broadcast ONE message with the combined delta
-    this._mux.broadcast(this._name, {
+    const update: SharedObjectUpdateFrame = {
       endpoint: this._name,
       type: 'update',
       delta: allDelta,
       v: this._version,
       now: new Date().toISOString(),
-    });
+    };
+    this._mux.broadcast(this._name, update);
+  }
+
+  private _validatePath(path: (string | number)[]): void {
+    if (path.length === 0) {
+      // Root change: full-schema validation.
+      const serialized = this._validator.hasDates ? serializeDates(this._data) : this._data;
+      this._validator.validate(serialized);
+      return;
+    }
+
+    const currentValue = getAtPath(this._data, path);
+    if (currentValue === undefined) {
+      // Deletion is represented as undefined at the hinted path.
+      return;
+    }
+
+    const subSchemaInfo = getSubSchemaInfo(this._schema, path);
+    if (!subSchemaInfo) return;
+
+    // Date format fields accept Date objects or parseable strings.
+    if (subSchemaInfo.dateFormat) {
+      if (currentValue instanceof Date) {
+        if (isNaN(currentValue.getTime())) {
+          throw new ValidationError(`: Invalid ${subSchemaInfo.dateFormat} value`);
+        }
+      } else if (typeof currentValue === 'string') {
+        if (isNaN(Date.parse(currentValue))) {
+          throw new ValidationError(`: Invalid ${subSchemaInfo.dateFormat} format`);
+        }
+      } else {
+        throw new ValidationError(`: Expected Date or string for ${subSchemaInfo.dateFormat}`);
+      }
+      return;
+    }
+
+    if (subSchemaInfo.isPrimitive) {
+      validatePrimitive(currentValue, subSchemaInfo.schema);
+      return;
+    }
+
+    if (subSchemaInfo.validator) {
+      const valueToValidate = subSchemaInfo.validator.hasDates
+        ? serializeDates(currentValue)
+        : currentValue;
+      subSchemaInfo.validator.validate(valueToValidate);
+    }
   }
 
   private _wrapDeltaAtPath(path: (string | number)[], entries: Diff): Diff {
