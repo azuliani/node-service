@@ -332,7 +332,7 @@ describe('Heartbeat System', () => {
       await delay(50);
     });
 
-    it('should emit disconnected exactly once after server goes down', async () => {
+    it('should emit disconnected once per endpoint after server goes down', async () => {
       client.PS('OnceSource').subscribe();
 
       // Wait for client to connect and receive heartbeats
@@ -346,17 +346,14 @@ describe('Heartbeat System', () => {
       // Close server to stop heartbeats
       await service.close();
 
-      // Wait long enough for multiple check intervals to fire (500ms >> 50ms interval).
-      // Without the fix, the heartbeat interval keeps firing _handleHeartbeatTimeout
-      // every 50ms, so disconnectedCount would be 7+ over 500ms.
-      // With the fix, heartbeat timeout fires once, and the WebSocket close also
-      // emits one disconnected — so we expect exactly 2 total (not unbounded).
+      // Wait long enough for both disconnect paths to have had a chance to run.
       await delay(500);
 
-      assert.ok(disconnectedCount <= 2,
-        `Expected at most 2 disconnected events (heartbeat timeout + ws close), got ${disconnectedCount}`);
-      assert.ok(disconnectedCount >= 1,
-        'Should emit at least 1 disconnected event');
+      assert.strictEqual(
+        disconnectedCount,
+        1,
+        `Expected exactly 1 disconnected event per endpoint emitter, got ${disconnectedCount}`
+      );
     });
   });
 

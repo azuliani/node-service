@@ -262,7 +262,7 @@ export class Client extends EventEmitter {
 
     // Emit disconnected events on all endpoints
     for (const client of this._pubSubClients) {
-      client.emit('disconnected');
+      client.handleDisconnect();
     }
     for (const client of this._sharedObjectClients) {
       client.handleDisconnect();

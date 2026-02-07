@@ -40,6 +40,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
   private _initTimeout: number;
 
   private _subscribed = false;
+  private _connected = false;
 
   private _data: T | null = null;
   private _v = 0;
@@ -82,7 +83,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
 
     this._mux.on('open', () => {
       if (!this._subscribed) return;
-      this.emit('connected');
+      this._emitConnected();
       if (!this._ready) {
         this._startInitTimeout();
       }
@@ -91,7 +92,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
     this._mux.on('close', () => {
       if (!this._subscribed) return;
       this._handleDisconnectInternal();
-      this.emit('disconnected');
+      this._emitDisconnected();
     });
   }
 
@@ -139,7 +140,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
       this._mux.subscribe(this._name);
 
       if (this._mux.connected) {
-        this.emit('connected');
+        this._emitConnected();
         if (!this._ready) {
           this._startInitTimeout();
         }
@@ -169,7 +170,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
 
     // Mirror previous behavior: treat unsubscribe like a disconnect/reset.
     this._handleDisconnectInternal();
-    this.emit('disconnected');
+    this._emitDisconnected({ force: true });
   }
 
   /**
@@ -185,7 +186,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
    */
   handleDisconnect(): void {
     this._handleDisconnectInternal();
-    this.emit('disconnected');
+    this._emitDisconnected();
   }
 
   private _handleFrame(frame: ServerToClientFrame): void {
@@ -238,7 +239,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
 
       // Reset local state and request a fresh init without tearing down the mux connection.
       this._handleDisconnectInternal();
-      this.emit('disconnected');
+      this._emitDisconnected();
 
       this._mux.resubscribe(this._name);
       this._startInitTimeout();
@@ -261,7 +262,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
 
       // Treat patch failures as divergence: reset local state and request a fresh init.
       this._handleDisconnectInternal();
-      this.emit('disconnected');
+      this._emitDisconnected();
 
       this._mux.resubscribe(this._name);
       this._startInitTimeout();
@@ -288,6 +289,18 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
     this._clearInitTimeout();
     this._initRetryCount = 0;
     this._reset(null);
+  }
+
+  private _emitConnected(): void {
+    if (this._connected) return;
+    this._connected = true;
+    this.emit('connected');
+  }
+
+  private _emitDisconnected(options: { force?: boolean } = {}): void {
+    if (!options.force && !this._connected) return;
+    this._connected = false;
+    this.emit('disconnected');
   }
 
   /**

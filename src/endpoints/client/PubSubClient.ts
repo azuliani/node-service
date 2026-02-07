@@ -32,6 +32,7 @@ export class PubSubClient extends EventEmitter {
   private _name: string;
   private _validator: CompiledValidator;
   private _subscribed = false;
+  private _connected = false;
 
   constructor(mux: MuxClient, endpoint: PubSubEndpointDef) {
     super();
@@ -46,13 +47,13 @@ export class PubSubClient extends EventEmitter {
     this._mux.on('open', () => {
       if (!this._subscribed) return;
       this._mux.flush().then(() => {
-        if (this._subscribed) this.emit('connected');
+        if (this._subscribed) this._emitConnected();
       }).catch((err) => {
         this.emit('error', err instanceof Error ? err : new Error(String(err)));
       });
     });
     this._mux.on('close', () => {
-      if (this._subscribed) this.emit('disconnected');
+      if (this._subscribed) this._emitDisconnected();
     });
     this._mux.on('error', (err) => {
       if (this._subscribed) this.emit('error', err);
@@ -76,7 +77,7 @@ export class PubSubClient extends EventEmitter {
     this._mux.subscribe(this._name);
     if (this._mux.connected) {
       this._mux.flush().then(() => {
-        if (this._subscribed && this._mux.connected) this.emit('connected');
+        if (this._subscribed && this._mux.connected) this._emitConnected();
       }).catch((err) => {
         this.emit('error', err instanceof Error ? err : new Error(String(err)));
       });
@@ -87,12 +88,19 @@ export class PubSubClient extends EventEmitter {
     if (!this._subscribed) return;
     this._subscribed = false;
     this._mux.unsubscribe(this._name);
-    queueMicrotask(() => this.emit('disconnected'));
+    queueMicrotask(() => this._emitDisconnected({ force: true }));
   }
 
   close(): void {
     this.unsubscribe();
     this._mux.clearEndpointHandler(this._name);
+  }
+
+  /**
+   * Handle transport-level disconnect from an external signal (e.g. heartbeat timeout).
+   */
+  handleDisconnect(): void {
+    this._emitDisconnected();
   }
 
   private _handleFrame(frame: ServerToClientFrame): void {
@@ -108,5 +116,17 @@ export class PubSubClient extends EventEmitter {
     } catch (err) {
       debug('Validation error for message on %s: %o', this._name, err);
     }
+  }
+
+  private _emitConnected(): void {
+    if (this._connected) return;
+    this._connected = true;
+    this.emit('connected');
+  }
+
+  private _emitDisconnected(options: { force?: boolean } = {}): void {
+    if (!options.force && !this._connected) return;
+    this._connected = false;
+    this.emit('disconnected');
   }
 }
