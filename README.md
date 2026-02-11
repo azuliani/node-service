@@ -187,6 +187,7 @@ DEBUG=node-service:* node your-script.js
 ## Legacy implementation
 
 The previous ZeroMQ-based implementation is preserved on branch `old` (and tag `v0.0.1`).
+For migration guidance, see [MIGRATION-OLD-TO-MAIN.md](./MIGRATION-OLD-TO-MAIN.md).
 
 ## License
 
