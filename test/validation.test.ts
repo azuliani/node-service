@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   compileSchema,
+  getSubSchemaInfo,
   validate,
   validateAndParseDates,
   isValid,
@@ -93,6 +94,46 @@ describe('Validation', () => {
           return true;
         }
       );
+    });
+  });
+
+  describe('getSubSchemaInfo', () => {
+    it('should resolve numeric additionalProperties keys', () => {
+      const schema: JSONSchema = {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          properties: {
+            value: { type: 'number' },
+          },
+        },
+      };
+
+      const infoFromStringKey = getSubSchemaInfo(schema, ['0', 'value']);
+      const infoFromNumberKey = getSubSchemaInfo(schema, [0, 'value']);
+
+      assert.ok(infoFromStringKey);
+      assert.ok(infoFromNumberKey);
+      assert.strictEqual(infoFromStringKey?.schema.type, 'number');
+      assert.strictEqual(infoFromNumberKey?.schema.type, 'number');
+      assert.strictEqual(infoFromStringKey?.isPrimitive, true);
+      assert.strictEqual(infoFromNumberKey?.isPrimitive, true);
+    });
+
+    it('should keep numeric path traversal for array items', () => {
+      const schema: JSONSchema = {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            value: { type: 'string' },
+          },
+        },
+      };
+
+      const info = getSubSchemaInfo(schema, ['0', 'value']);
+      assert.ok(info);
+      assert.strictEqual(info?.schema.type, 'string');
     });
   });
 

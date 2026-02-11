@@ -363,8 +363,18 @@ export function getSubSchemaAtPath(schema: JSONSchema, path: (string | number)[]
 
   for (const segment of path) {
     if (!current) return undefined;
+    const segmentKey = String(segment);
+    const isNumericSegment = typeof segment === 'number' || (typeof segment === 'string' && segment.length > 0 && !isNaN(Number(segment)));
+    const isArrayType = current.type === 'array' || (Array.isArray(current.type) && current.type.includes('array'));
 
-    if (typeof segment === 'number' || !isNaN(Number(segment))) {
+    // Prefer explicit object properties (including numeric-looking keys such as "0").
+    if (current.properties && current.properties[segmentKey]) {
+      current = current.properties[segmentKey];
+      continue;
+    }
+
+    // Only treat numeric segments as array indexes on array-like schemas.
+    if (isNumericSegment && (isArrayType || current.items !== undefined)) {
       // Array index - use items schema
       if (current.items) {
         if (Array.isArray(current.items)) {
@@ -376,16 +386,16 @@ export function getSubSchemaAtPath(schema: JSONSchema, path: (string | number)[]
       } else {
         return undefined;
       }
-    } else {
-      // Object property
-      if (current.properties && current.properties[segment]) {
-        current = current.properties[segment];
-      } else if (current.additionalProperties && typeof current.additionalProperties === 'object') {
-        current = current.additionalProperties;
-      } else {
-        return undefined;
-      }
+      continue;
     }
+
+    // Object map key via additionalProperties (supports numeric-looking keys too).
+    if (current.additionalProperties && typeof current.additionalProperties === 'object') {
+      current = current.additionalProperties;
+      continue;
+    }
+
+    return undefined;
   }
 
   return current;
