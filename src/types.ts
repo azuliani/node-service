@@ -165,3 +165,11 @@ export interface SerializedError {
   endpoint?: string;
   stack?: string;
 }
+
+/**
+ * Optional settings for a single RPC call.
+ */
+export interface RPCCallOptions {
+  /** Timeout in milliseconds. Default: 10000 */
+  timeout?: number;
+}

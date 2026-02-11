@@ -71,7 +71,7 @@ describe('Integration Tests', () => {
       await delay(100); // Wait for heartbeat and validation
 
       // Make an RPC call to verify it works
-      const result = await client.RPC('Echo').call('hello', 1000);
+      const result = await client.RPC('Echo').call('hello', { timeout: 1000 });
       assert.strictEqual(result, 'hello');
 
       client.close();
@@ -190,7 +190,7 @@ describe('Integration Tests', () => {
       const eventPromise = waitFor(client.PS('Events'), 'message', 2000);
 
       // Make RPC call - this should trigger an event
-      const result = await client.RPC('Commands').call({ command: 'test' }, 1000);
+      const result = await client.RPC('Commands').call({ command: 'test' }, { timeout: 1000 });
       assert.strictEqual(result, true);
 
       // Wait for event
@@ -203,8 +203,8 @@ describe('Integration Tests', () => {
       receivedLogs.length = 0;
 
       // Send logs from client (RPC)
-      await client.RPC('Logs').call({ level: 'info', message: 'test log 1' }, 1000);
-      await client.RPC('Logs').call({ level: 'warn', message: 'test log 2' }, 1000);
+      await client.RPC('Logs').call({ level: 'info', message: 'test log 1' }, { timeout: 1000 });
+      await client.RPC('Logs').call({ level: 'warn', message: 'test log 2' }, { timeout: 1000 });
 
       await waitUntil(() => receivedLogs.length >= 2);
 
@@ -227,9 +227,9 @@ describe('Integration Tests', () => {
       });
 
       // Push a log, make an RPC call, and listen for event
-      await client.RPC('Logs').call({ level: 'debug', message: 'simultaneous test' }, 1000);
+      await client.RPC('Logs').call({ level: 'debug', message: 'simultaneous test' }, { timeout: 1000 });
 
-      const rpcResult = await client.RPC('Commands').call({ command: 'multi' }, 1000);
+      const rpcResult = await client.RPC('Commands').call({ command: 'multi' }, { timeout: 1000 });
       rpcSucceeded = rpcResult === true;
 
       await eventPromise;
@@ -305,7 +305,7 @@ describe('Integration Tests', () => {
       assert.deepStrictEqual(client.SO('GameState').data?.players, []);
 
       // Add player via RPC
-      const result = await client.RPC('AddPlayer').call('Player1', 1000);
+      const result = await client.RPC('AddPlayer').call('Player1', { timeout: 1000 });
       assert.strictEqual(result, true);
 
       await waitUntil(() => (client.SO('GameState').data?.players?.length ?? 0) >= 1);
@@ -316,8 +316,8 @@ describe('Integration Tests', () => {
 
     it('should receive multiple updates via RPC', async () => {
       // Add more players
-      await client.RPC('AddPlayer').call('Player2', 1000);
-      await client.RPC('AddPlayer').call('Player3', 1000);
+      await client.RPC('AddPlayer').call('Player2', { timeout: 1000 });
+      await client.RPC('AddPlayer').call('Player3', { timeout: 1000 });
 
       await waitUntil(() => (client.SO('GameState').data?.players?.length ?? 0) >= 3);
 
@@ -400,8 +400,8 @@ describe('Integration Tests', () => {
 
     it('should handle RPC from multiple clients', async () => {
       const [result1, result2] = await Promise.all([
-        client1.RPC('Ping').call('client1', 1000),
-        client2.RPC('Ping').call('client2', 1000),
+        client1.RPC('Ping').call('client1', { timeout: 1000 }),
+        client2.RPC('Ping').call('client2', { timeout: 1000 }),
       ]);
 
       assert.strictEqual(result1, 'pong:client1');

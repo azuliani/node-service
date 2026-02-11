@@ -71,7 +71,7 @@ describe('Descriptor mismatch', () => {
     // Verify the client closed itself (mux is disconnected)
     // An RPC call on the closed client should fail
     await assert.rejects(
-      () => client.RPC('Different').call(42, 1000),
+      () => client.RPC('Different').call(42, { timeout: 1000 }),
       (callErr: Error) => {
         // Should get a connection or timeout error since the mux is closed
         assert.ok(callErr instanceof Error);

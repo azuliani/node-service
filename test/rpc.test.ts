@@ -226,7 +226,7 @@ describe('RPC Pattern', () => {
 
     it('should timeout if response takes too long', async () => {
       await assert.rejects(
-        () => client.RPC('slow').call(500, 100), // 500ms delay, 100ms timeout
+        () => client.RPC('slow').call(500, { timeout: 100 }), // 500ms delay, 100ms timeout
         (err: Error) => {
           assert.ok(err instanceof TimeoutError || err.message === 'timeout');
           return true;
@@ -235,8 +235,33 @@ describe('RPC Pattern', () => {
     });
 
     it('should succeed if response is fast enough', async () => {
-      const result = await client.RPC('slow').call(50, 500); // 50ms delay, 500ms timeout
+      const result = await client.RPC('slow').call(50, { timeout: 500 }); // 50ms delay, 500ms timeout
       assert.strictEqual(result, 'done');
+    });
+
+    it('should accept timeout options object', async () => {
+      const result = await client.RPC('slow').call(50, { timeout: 500 });
+      assert.strictEqual(result, 'done');
+    });
+
+    it('should reject unknown RPC call options', async () => {
+      await assert.rejects(
+        () => client.RPC('slow').call(50, { timeout: 500, retries: 2 } as any),
+        (err: Error) => {
+          assert.ok(err.message.includes('Unknown RPC call options'));
+          return true;
+        }
+      );
+    });
+
+    it('should reject non-object RPC call options', async () => {
+      await assert.rejects(
+        () => client.RPC('slow').call(50, 500 as any),
+        (err: Error) => {
+          assert.ok(err.message.includes('RPC call options must be an object'));
+          return true;
+        }
+      );
     });
   });
 

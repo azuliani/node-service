@@ -96,6 +96,7 @@ export type {
   ServiceOptions,
   ClientOptions,
   RPCHandler,
+  RPCCallOptions,
   Handlers,
   Initials,
   SerializedError,

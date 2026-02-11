@@ -37,7 +37,7 @@ describe('Plugins', () => {
     });
 
     it('should return health info', async () => {
-      const result = await client.RPC('_health').call(null, 2000);
+      const result = await client.RPC('_health').call(null, { timeout: 2000 });
 
       assert.strictEqual(typeof result.uptimeSec, 'number');
       assert.strictEqual(typeof result.rssBytes, 'number');
@@ -92,10 +92,10 @@ describe('Plugins', () => {
     });
 
     it('should record RPC metrics', async () => {
-      await client.RPC('Ping').call(null, 2000);
-      await client.RPC('Ping').call(null, 2000);
+      await client.RPC('Ping').call(null, { timeout: 2000 });
+      await client.RPC('Ping').call(null, { timeout: 2000 });
 
-      const metrics = await client.RPC('_metrics').call(null, 2000);
+      const metrics = await client.RPC('_metrics').call(null, { timeout: 2000 });
       assert.strictEqual(metrics.rpc.Ping.calls, 2);
       assert.strictEqual(metrics.rpc.Ping.errors, 0);
     });
@@ -137,7 +137,7 @@ describe('Plugins', () => {
       const client = createClient(spec);
       await delay(50);
 
-      const result = await client.RPC('Echo').call('hello', 2000);
+      const result = await client.RPC('Echo').call('hello', { timeout: 2000 });
       assert.strictEqual(result, 'hello');
 
       client.close();
@@ -191,7 +191,7 @@ describe('Plugins', () => {
       client.PS('_audit').subscribe();
       await delay(50);
 
-      await client.RPC('Echo').call('hello', 2000);
+      await client.RPC('Echo').call('hello', { timeout: 2000 });
       await delay(50);
 
       assert.ok(events.some((e) => e.type === 'rpc' && e.endpoint === 'Echo'));

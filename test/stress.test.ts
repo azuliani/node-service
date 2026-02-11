@@ -156,6 +156,10 @@ describe('Stress Tests', () => {
     });
 
     it('should handle large update payloads', async () => {
+      if (!client.SO('BigData').ready) {
+        await client.SO('BigData').subscribe();
+      }
+
       // Replace with new large array
       const newItems = [];
       for (let i = 0; i < 500; i++) {
@@ -168,10 +172,13 @@ describe('Stress Tests', () => {
 
       service.SO('BigData').data.items = newItems;
 
-      await waitUntil(() => client.SO('BigData').data?.items.length === 500, 5000);
+      await waitUntil(
+        () => client.SO('BigData').ready && client.SO('BigData').data.items.length === 500,
+        5000
+      );
 
-      assert.strictEqual(client.SO('BigData').data?.items.length, 500);
-      assert.strictEqual(client.SO('BigData').data?.items[0].id, 10000);
+      assert.strictEqual(client.SO('BigData').data.items.length, 500);
+      assert.strictEqual(client.SO('BigData').data.items[0].id, 10000);
     });
   });
 
@@ -534,7 +541,7 @@ describe('Stress Tests', () => {
         return (async () => {
           const promises: Promise<unknown>[] = [];
           for (let seq = 0; seq < messagesPerClient; seq++) {
-            promises.push(c.RPC('Collector').call({ clientId, seq }, 2000));
+            promises.push(c.RPC('Collector').call({ clientId, seq }, { timeout: 2000 }));
           }
           await Promise.all(promises);
         })();

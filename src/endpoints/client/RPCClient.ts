@@ -8,6 +8,7 @@ import createDebug from 'debug';
 import { compileSchema, serializeDates } from '../../validation.ts';
 import type { CompiledValidator } from '../../validation.ts';
 import type { RPCEndpoint as RPCEndpointDef } from '../../types.ts';
+import type { RPCCallOptions } from '../../types.ts';
 import type { MuxClient } from '../../mux/MuxClient.ts';
 
 const debug = createDebug('node-service:rpc-client');
@@ -39,7 +40,7 @@ export class RPCClient {
    * Make an RPC call.
    *
    * @param input - The request input (must match requestSchema)
-   * @param timeout - Timeout in milliseconds (default: 10000)
+   * @param options - RPC call options
    * @returns The response data
    * @throws TimeoutError if request times out
    * @throws ValidationError if input doesn't match schema
@@ -47,8 +48,23 @@ export class RPCClient {
    */
   async call<TInput = unknown, TOutput = unknown>(
     input: TInput,
-    timeout = 10000
+    options: RPCCallOptions = {}
   ): Promise<TOutput> {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError('RPC call options must be an object');
+    }
+
+    const { timeout = 10000, ...unknownOptions } = options as RPCCallOptions &
+      Record<string, unknown>;
+    const unknownKeys = Object.keys(unknownOptions);
+    if (unknownKeys.length > 0) {
+      throw new Error(`Unknown RPC call options: ${unknownKeys.join(', ')}`);
+    }
+
+    if (!Number.isFinite(timeout)) {
+      throw new TypeError('RPC timeout must be a finite number');
+    }
+
     // Serialize dates before validation/transport
     const serializedInput = this._requestValidator.hasDates ? serializeDates(input) : input;
     this._requestValidator.validate(serializedInput);
