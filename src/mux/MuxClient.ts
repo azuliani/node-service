@@ -66,7 +66,7 @@ export class MuxClient extends EventEmitter {
 
     this._transport.onError((err) => {
       debug('transport error: %o', err);
-      this.emit('error', err);
+      this._emitError(err);
     });
 
     this._transport.onMessage((text) => {
@@ -84,7 +84,7 @@ export class MuxClient extends EventEmitter {
   connect(): void {
     this._transport.connect(this._url).catch((err) => {
       // Transport may auto-reconnect; surface error for observability.
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this._emitError(err instanceof Error ? err : new Error(String(err)));
     });
   }
 
@@ -251,5 +251,17 @@ export class MuxClient extends EventEmitter {
     }
 
     pending.resolve(res.res);
+  }
+
+  /**
+   * Emit transport-level errors only when someone is listening.
+   * Avoids EventEmitter's special `error` throw when no listeners are attached.
+   */
+  private _emitError(err: Error): void {
+    if (this.listenerCount('error') === 0) {
+      debug('dropping unhandled mux error: %o', err);
+      return;
+    }
+    this.emit('error', err);
   }
 }

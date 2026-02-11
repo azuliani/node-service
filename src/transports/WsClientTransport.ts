@@ -141,13 +141,33 @@ export class WsClientTransport implements ClientTransport {
     );
     const jitter = baseDelay * WsClientTransport.JITTER_FACTOR * (Math.random() - 0.5);
     const delay = Math.round(baseDelay + jitter);
+    const attempt = this._reconnectAttempt + 1;
+
+    console.error(
+      '[node-service] Reconnect scheduled (attempt %d) in %dms to %s',
+      attempt,
+      delay,
+      this._url ?? '<unknown>'
+    );
 
     this._reconnectTimer = setTimeout(() => {
       this._reconnectTimer = null;
       this._reconnectAttempt++;
+      console.error(
+        '[node-service] Reconnect attempt %d to %s',
+        this._reconnectAttempt,
+        this._url ?? '<unknown>'
+      );
       if (this._shouldReconnect && this._state === 'disconnected') {
         debug('Attempting reconnect (attempt %d, delay %dms)', this._reconnectAttempt, delay);
-        this._doConnect().catch((err) => debug('Reconnect failed: %o', err));
+        this._doConnect().catch((err) => {
+          console.error(
+            '[node-service] Reconnect attempt %d failed: %s',
+            this._reconnectAttempt,
+            err instanceof Error ? err.message : String(err)
+          );
+          debug('Reconnect failed: %o', err);
+        });
       }
     }, delay);
     this._reconnectTimer.unref();

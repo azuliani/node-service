@@ -298,4 +298,44 @@ describe('Reconnection Behavior', () => {
       await delay(100);
     });
   });
+
+  describe('Initial connect refused then recover', () => {
+    it('should reconnect when server starts after initial ECONNREFUSED', async () => {
+      const port = await getAvailablePort();
+      const descriptor = createDescriptor(port, {
+        endpoints: [
+          {
+            name: 'State',
+            type: 'SharedObject',
+            objectSchema: {
+              type: 'object',
+              properties: {
+                value: { type: 'number' },
+              },
+            },
+          } as SharedObjectEndpoint,
+        ],
+      });
+
+      const client = new Client(descriptor);
+      client.SO('State').subscribe();
+
+      // Give the initial connection attempt time to fail before server comes up.
+      await delay(250);
+
+      const service = new Service(descriptor, {}, { State: { value: 7 } });
+      await service.ready();
+
+      try {
+        await waitFor(client.SO('State'), 'init', 12000);
+        assert.strictEqual(client.SO('State').data?.value, 7);
+      } finally {
+        client.SO('State').unsubscribe();
+        await delay(100);
+        client.close();
+        await service.close();
+        await delay(100);
+      }
+    });
+  });
 });
