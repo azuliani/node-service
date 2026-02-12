@@ -80,7 +80,15 @@ export { defineServiceSpec, createService, createClient } from './plugins.ts';
 export { healthPlugin } from './plugins/health.ts';
 export { metricsPlugin } from './plugins/metrics.ts';
 export { auditLogPlugin } from './plugins/auditLog.ts';
+export { graphitePlugin } from './plugins/graphite.ts';
 export { ErrorCode, hasErrorCode, getErrorCode } from './errors.ts';
+
+// Typed endpoint builders
+export { rpc, pubsub, sharedObject } from './define.ts';
+
+// TypeBox re-exports for typed endpoint definitions
+export { Type } from './validation.ts';
+export type { TSchema, Static } from './validation.ts';
 
 // Type-only exports
 export type {
@@ -103,6 +111,19 @@ export type {
 } from './types.ts';
 
 export type {
+  TypedRPCDef,
+  TypedPubSubDef,
+  TypedSharedObjectDef,
+  TypedRPCClient,
+  TypedPubSubClient,
+  TypedServicePubSub,
+  InferRPCRequest,
+  InferRPCReply,
+  InferPubSubMessage,
+  InferSharedObject,
+} from './define.ts';
+
+export type {
   SubFrame,
   UnsubFrame,
   RpcRequestFrame,
@@ -120,3 +141,4 @@ export type { ServicePlugin, ServiceSpec, DefineServiceSpecInput } from './plugi
 export type { HealthInfo } from './plugins/health.ts';
 export type { MetricsSnapshot } from './plugins/metrics.ts';
 export type { AuditEvent } from './plugins/auditLog.ts';
+export type { GraphitePluginOptions } from './plugins/graphite.ts';
