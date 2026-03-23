@@ -21,7 +21,7 @@ class SharedObjectClient extends EventEmitter {
         // time to propagate to the server, so we wait to allow queued diffs to arrive
         // first. If too short, we may miss early diffs and end up with version gaps.
         this._initDelay = options.initDelay ?? 100;
-        this._fetchTimeoutMs = options.initTimeout ?? 3000;
+        this._fetchTimeoutMs = options.initTimeout ?? 15000;
 
         // Connection and subscription state
         this._connected = false;
