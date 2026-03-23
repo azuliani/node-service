@@ -75,7 +75,7 @@ export class SharedObjectClient<T extends object = object> extends EventEmitter 
     this._mux = mux;
     this._name = endpoint.name;
     this._validator = compileSchema(endpoint.objectSchema);
-    this._initTimeout = options.initTimeout ?? 3000;
+    this._initTimeout = options.initTimeout ?? 15000;
 
     this._reset(null);
 

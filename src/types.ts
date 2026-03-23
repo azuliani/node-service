@@ -129,7 +129,7 @@ export interface ServiceOptions {
  * Client configuration options.
  */
 export interface ClientOptions {
-  /** Timeout waiting for init message in milliseconds. Default: 3000 */
+  /** Timeout waiting for init message in milliseconds. Default: 15000 */
   initTimeout?: number;
   /**
    * Override the client transport implementation.

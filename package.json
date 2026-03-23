@@ -1,6 +1,6 @@
 {
   "name": "@azuliani/node-service",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "WebSocket-based messaging library with Service/Client abstractions",
   "repository": {
     "type": "git",

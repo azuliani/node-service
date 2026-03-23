@@ -56,7 +56,7 @@ export class Client extends EventEmitter {
     super();
     this._descriptor = descriptor;
     this._options = {
-      initTimeout: options.initTimeout ?? 3000,
+      initTimeout: options.initTimeout ?? 15000,
       ...(options.clientTransport ? { clientTransport: options.clientTransport } : {}),
     };
 

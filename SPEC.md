@@ -203,7 +203,7 @@ Throws `MissingHandlerError` if RPC endpoint has no handler.
 new Client(descriptor: Descriptor, options?: ClientOptions)
 ```
 
-- `options.initTimeout` - Timeout waiting for init message, default 3000ms
+- `options.initTimeout` - Timeout waiting for init message, default 15000ms
 
 ### Endpoint Access
 ```typescript
