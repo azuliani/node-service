@@ -89,6 +89,10 @@ function SharedObjectValidation(endpoint, obj, hint){
 
     const subs = _getSubsForHint(endpoint.objectSchema, obj, hint);
 
+    if (!subs) {
+        return; // Deleted an entry of a '*' map, nothing left to validate.
+    }
+
     const schema = subs.schema;
     obj = subs.obj;
 
@@ -195,6 +199,9 @@ function _getSubsForHint(schema, obj, hint){
     let i = 0;
     while(i < hint.length){
         if (!(hint[i] in obj)) {
+            if (schema.type === 'object' && schema.properties && !(hint[i] in schema.properties) && '*' in schema.properties) {
+                return null; // Removing a map entry cannot make the map invalid, skip validating the parent.
+            }
             break; // On delete, validate entire parent. Otherwise possible missing items may not be caught.
         }
 
