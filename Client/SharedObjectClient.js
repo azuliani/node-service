@@ -127,14 +127,15 @@ class SharedObjectClient extends EventEmitter {
                 return this._init();
             }
 
-            // Diffs are already reversed by Server!
+            // The server applied these diffs to its own copy in this order (array deletions highest index
+            // first); apply them in the same order. applyDiff would reorder them.
             let diffs = ptr.diffs;
             safePush(totalDiffs, diffs)
 
             for(let diff of diffs) {
                 parseDiffDates(this.endpoint, diff);
+                deepDiff.applyChange(this.data, true, diff);
             }
-            deepDiff.applyDiff(this.data, diffs);
 
             this.timeSum += now - new Date(ptr.now);
             this.timeCount++;

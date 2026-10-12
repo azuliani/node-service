@@ -95,6 +95,8 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
             if (diffs) {
                 for (let i = diffs.length - 1; i >= 0; i--) {
                     const diff = fastcopy(diffs[i]);
+                    // Clients restore Dates from the endpoint schema, as for the init snapshot
+                    delete diff.$dates;
                     if (diff.path) {
                         diff.path = [...hintUsed, ...diff.path];
                     } else {
