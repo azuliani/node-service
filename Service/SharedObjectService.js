@@ -21,7 +21,8 @@ class SharedObjectService{
 
     call(data, callback) {
         if (data.input === "init") {
-            callback(JSON.stringify({err: null, res: {data: this.data, v: this._v}}));
+            // The state at version _v; changes to data no notify has covered yet reach the client with that notify
+            callback(JSON.stringify({err: null, res: {data: this._lastTransmit, v: this._v}}));
         } else {
             callback(JSON.stringify({err: `Unknown command: ${data.input}`}));
         }
