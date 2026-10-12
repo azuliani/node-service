@@ -1,6 +1,6 @@
 {
   "name": "@azuliani/node-service",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Node.js library for building services with ZeroMQ-based messaging patterns",
   "main": "index.js",
   "files": [
@@ -27,7 +27,7 @@
     "lodash": ">=4.17.23"
   },
   "dependencies": {
-    "@azuliani/deep-diff": "0.0.1",
+    "@azuliani/deep-diff": "1.0.3",
     "fast-copy": "^3.0.2",
     "schema-inspector": "^2.1.0",
     "tinycache": "^1.1.2",
