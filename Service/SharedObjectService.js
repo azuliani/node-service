@@ -111,13 +111,15 @@ function diffAndReverseAndApplyWithHint(lhs, rhs, hint, bypass){
             // BYPASS
             assert(lhsParent && hint[0]);
 
+            // A copy, as for a shortcut add: the transmitted state must not follow later changes to data
+            const cloned = fastcopy(rhsWithHint);
             reportDiffs.push({
                 kind: 'N',
                 path: hint,
-                rhs: rhsWithHint
+                rhs: cloned
             });
 
-            lhsParent[hint[hint.length-1]] = rhsWithHint;
+            lhsParent[hint[hint.length-1]] = cloned;
 
         }
     }
