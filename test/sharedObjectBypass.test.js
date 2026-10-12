@@ -13,7 +13,17 @@ const { waitFor, delay } = require('./helpers');
 
 const BASE_PORT = 16200;
 
-function createDescriptor(portOffset) {
+const providersSchema = {
+    type: 'object',
+    properties: {
+        providers: {
+            type: 'object',
+            properties: { '*': { type: 'boolean' } }
+        }
+    }
+};
+
+function createDescriptor(portOffset, objectSchema) {
     return {
         transports: {
             source: {
@@ -29,23 +39,15 @@ function createDescriptor(portOffset) {
             {
                 name: "State",
                 type: "SharedObject",
-                objectSchema: {
-                    type: 'object',
-                    properties: {
-                        providers: {
-                            type: 'object',
-                            properties: { '*': { type: 'boolean' } }
-                        }
-                    }
-                }
+                objectSchema
             }
         ]
     };
 }
 
-async function start(portOffset) {
-    const descriptor = createDescriptor(portOffset);
-    const server = new Service(descriptor, {}, { State: { providers: { mollybet: true, betfair: true } } });
+async function start(portOffset, objectSchema = providersSchema, initial = { providers: { mollybet: true, betfair: true } }) {
+    const descriptor = createDescriptor(portOffset, objectSchema);
+    const server = new Service(descriptor, {}, { State: initial });
     const client = new Client(descriptor, { initDelay: 50 });
     await delay(50);
     return { server, client };
@@ -97,6 +99,49 @@ describe('SharedObject dirtyBypass', () => {
             assert.deepStrictEqual(client.State.data.providers, { mollybet: true, betfair: true });
 
             const update = waitFor(client.State, 'update', 5000);
+            server.State.notify(['providers']);
+            await update;
+            assert.deepStrictEqual(client.State.data.providers, { mollybet: false, betfair: true });
+        } finally {
+            await stop(nodes);
+        }
+    });
+
+    it('a notify after a bypass of one offer deep in the tree reaches connected clients', async () => {
+        // TxPrices' shape: notify([glob, "ir", offer], true), then the offer object changes in place
+        const nodes = await start(4, { skip: true }, { games: { g1: { ir: { o1: { price: 2, provider: 'betfair' } } } } });
+        const { server, client } = nodes;
+        try {
+            await subscribe(client);
+
+            let update = waitFor(client.State, 'update', 5000);
+            server.State.notify(['games', 'g1', 'ir', 'o1'], true);
+            await update;
+
+            update = waitFor(client.State, 'update', 1000).catch(() => null);
+            server.State.data.games.g1.ir.o1.price = 3;
+            server.State.notify(['games', 'g1']);
+            await update;
+
+            assert.deepStrictEqual(client.State.data.games.g1.ir.o1, { price: 3, provider: 'betfair' });
+        } finally {
+            await stop(nodes);
+        }
+    });
+
+    it('a bypass of a single value keeps that value as transmitted', async () => {
+        const nodes = await start(6);
+        const { server, client } = nodes;
+        try {
+            await subscribe(client);
+
+            let update = waitFor(client.State, 'update', 5000);
+            server.State.notify(['providers', 'mollybet'], true);
+            await update;
+            assert.strictEqual(client.State.data.providers.mollybet, true);
+
+            update = waitFor(client.State, 'update', 5000);
+            server.State.data.providers.mollybet = false;
             server.State.notify(['providers']);
             await update;
             assert.deepStrictEqual(client.State.data.providers, { mollybet: false, betfair: true });
