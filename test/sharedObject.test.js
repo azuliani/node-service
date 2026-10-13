@@ -3,21 +3,10 @@
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
-
-const BASE_PORT = 15400;
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        source: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        },
-        rpc: {
-            client: `tcp://127.0.0.1:${BASE_PORT + 1}`,
-            server: `tcp://127.0.0.1:${BASE_PORT + 1}`
-        }
-    },
+    transports: {}, // free ports in before()
     endpoints: [
         {
             name: "State",
@@ -69,10 +58,13 @@ describe('SharedObject Endpoint', () => {
     let client;
 
     before(async () => {
+        const [sourcePort, rpcPort] = await freePorts(2);
+        descriptor.transports.source = { client: `tcp://127.0.0.1:${sourcePort}`, server: `tcp://127.0.0.1:${sourcePort}` };
+        descriptor.transports.rpc = { client: `tcp://127.0.0.1:${rpcPort}`, server: `tcp://127.0.0.1:${rpcPort}` };
         server = new Service(descriptor, {}, { State: { ...initialState } });
         client = new Client(descriptor, { initDelay: 50 });
 
-        await delay(50);
+        await sourceConnected(client);
     });
 
     after(async () => {
@@ -224,19 +216,9 @@ describe('SharedObject Message Queueing During Init', { concurrency: 1 }, () => 
     // queueing. The correct behavior is: queue all messages during init regardless of
     // version, then filter when snapshot arrives.
 
-    // Shared test infrastructure - sequential execution to avoid port conflicts
-    const QUEUE_TEST_PORT = 15600;
+    // Shared test infrastructure
     const queueTestDescriptor = {
-        transports: {
-            source: {
-                client: `tcp://127.0.0.1:${QUEUE_TEST_PORT}`,
-                server: `tcp://127.0.0.1:${QUEUE_TEST_PORT}`
-            },
-            rpc: {
-                client: `tcp://127.0.0.1:${QUEUE_TEST_PORT + 1}`,
-                server: `tcp://127.0.0.1:${QUEUE_TEST_PORT + 1}`
-            }
-        },
+        transports: {}, // free ports in before()
         endpoints: [
             {
                 name: "State",
@@ -256,6 +238,9 @@ describe('SharedObject Message Queueing During Init', { concurrency: 1 }, () => 
     let testClient;
 
     before(async () => {
+        const [sourcePort, rpcPort] = await freePorts(2);
+        queueTestDescriptor.transports.source = { client: `tcp://127.0.0.1:${sourcePort}`, server: `tcp://127.0.0.1:${sourcePort}` };
+        queueTestDescriptor.transports.rpc = { client: `tcp://127.0.0.1:${rpcPort}`, server: `tcp://127.0.0.1:${rpcPort}` };
         testServer = new Service(queueTestDescriptor, {}, { State: { counter: 0, message: 'init' } });
         await delay(50);
     });

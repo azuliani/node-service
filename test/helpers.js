@@ -1,7 +1,46 @@
 "use strict";
 
+const net = require('net');
+
 // Set test environment for MonitoredSocket EADDRINUSE handling
 process.env.NODE_ENV = 'test';
+
+/**
+ * Get free TCP ports on 127.0.0.1 from the OS. Fixed ports collide when test files run in parallel, or when a
+ * leftover test process or another service on the box still holds them. The ports are held open together while
+ * they are collected, so they are distinct.
+ * @param {number} count - Number of ports
+ * @returns {Promise<number[]>}
+ */
+async function freePorts(count) {
+    const servers = [];
+    for (let i = 0; i < count; i++) {
+        const server = net.createServer();
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, '127.0.0.1', resolve);
+        });
+        servers.push(server);
+    }
+    const ports = servers.map(server => server.address().port);
+    await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve))));
+    return ports;
+}
+
+/**
+ * Wait until a client's source connection is up. The service binds asynchronously: a client that connects first is
+ * refused and ZeroMQ retries after its reconnect interval (connections came up 130-190 ms late on Linux), so whatever
+ * the service publishes before then never reaches the client.
+ * @param {Client} client - The client
+ * @param {number} timeout - Timeout in milliseconds
+ * @returns {Promise}
+ */
+function sourceConnected(client, timeout = 5000) {
+    if (client._isSourceConnected) {
+        return Promise.resolve();
+    }
+    return waitFor(client._monitoredSource, 'connected', timeout);
+}
 
 /**
  * Wait for an event to be emitted on an EventEmitter
@@ -32,51 +71,9 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Create a descriptor for testing with specified transports
- * @param {number} basePort - Base port number
- * @param {Object} options - Which transports to include
- * @returns {Object} Descriptor object
- */
-function createDescriptor(basePort, options = {}) {
-    const transports = {};
-
-    if (options.source) {
-        transports.source = {
-            client: `tcp://127.0.0.1:${basePort}`,
-            server: `tcp://127.0.0.1:${basePort}`
-        };
-    }
-
-    if (options.sink) {
-        transports.sink = {
-            client: `tcp://127.0.0.1:${basePort + 1}`,
-            server: `tcp://127.0.0.1:${basePort + 1}`
-        };
-    }
-
-    if (options.rpc) {
-        transports.rpc = {
-            client: `tcp://127.0.0.1:${basePort + 2}`,
-            server: `tcp://127.0.0.1:${basePort + 2}`
-        };
-    }
-
-    if (options.pushpull) {
-        transports.pushpull = {
-            client: `tcp://127.0.0.1:${basePort + 3}`,
-            server: `tcp://127.0.0.1:${basePort + 3}`
-        };
-    }
-
-    return {
-        transports,
-        endpoints: options.endpoints || []
-    };
-}
-
 module.exports = {
     waitFor,
     delay,
-    createDescriptor
+    freePorts,
+    sourceConnected
 };

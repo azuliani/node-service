@@ -3,22 +3,11 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
 describe('Multi-endpoint Service (Two SharedObjects + RPC)', () => {
-    const BASE_PORT = 18200;
-
     const descriptor = {
-        transports: {
-            source: {
-                client: `tcp://127.0.0.1:${BASE_PORT}`,
-                server: `tcp://127.0.0.1:${BASE_PORT}`
-            },
-            rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + 2}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + 2}`
-            }
-        },
+        transports: {}, // free ports in before()
         endpoints: [
             {
                 name: "Alpha",
@@ -57,6 +46,9 @@ describe('Multi-endpoint Service (Two SharedObjects + RPC)', () => {
     let server, client;
 
     before(async () => {
+        const [sourcePort, rpcPort] = await freePorts(2);
+        descriptor.transports.source = { client: `tcp://127.0.0.1:${sourcePort}`, server: `tcp://127.0.0.1:${sourcePort}` };
+        descriptor.transports.rpc = { client: `tcp://127.0.0.1:${rpcPort}`, server: `tcp://127.0.0.1:${rpcPort}` };
         server = new Service(descriptor, {
             Echo: (req, reply) => {
                 reply(null, { message: `Echo: ${req}` });
@@ -67,7 +59,7 @@ describe('Multi-endpoint Service (Two SharedObjects + RPC)', () => {
         });
 
         client = new Client(descriptor, { initDelay: 50 });
-        await delay(50);
+        await sourceConnected(client);
 
         // Subscribe both SharedObjects up front and wait for init
         const alphaInit = waitFor(client.Alpha, 'init', 5000);
@@ -121,20 +113,9 @@ describe('Multi-endpoint Service (Two SharedObjects + RPC)', () => {
 });
 
 describe('Non-existing SharedObject endpoint', () => {
-    const BASE_PORT = 18400;
-
     // Server descriptor: only Alpha and Echo
     const serverDescriptor = {
-        transports: {
-            source: {
-                client: `tcp://127.0.0.1:${BASE_PORT}`,
-                server: `tcp://127.0.0.1:${BASE_PORT}`
-            },
-            rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + 2}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + 2}`
-            }
-        },
+        transports: {}, // free ports in before()
         endpoints: [
             {
                 name: "Alpha",
@@ -181,6 +162,9 @@ describe('Non-existing SharedObject endpoint', () => {
     let server, client;
 
     before(async () => {
+        const [sourcePort, rpcPort] = await freePorts(2);
+        serverDescriptor.transports.source = { client: `tcp://127.0.0.1:${sourcePort}`, server: `tcp://127.0.0.1:${sourcePort}` };
+        serverDescriptor.transports.rpc = { client: `tcp://127.0.0.1:${rpcPort}`, server: `tcp://127.0.0.1:${rpcPort}` };
         server = new Service(serverDescriptor, {
             Echo: (req, reply) => {
                 reply(null, { message: `Echo: ${req}` });
@@ -190,7 +174,7 @@ describe('Non-existing SharedObject endpoint', () => {
         });
 
         client = new Client(clientDescriptor, { initDelay: 50 });
-        await delay(50);
+        await sourceConnected(client);
     });
 
     after(async () => {

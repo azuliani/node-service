@@ -3,17 +3,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { delay } = require('./helpers');
-
-const BASE_PORT = 15300;
+const { delay, freePorts } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        pushpull: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        }
-    },
+    transports: {}, // a free port in before()
     endpoints: [
         {
             name: "Work",
@@ -36,6 +29,8 @@ describe('PushPull Endpoint', () => {
     let worker2;
 
     before(async () => {
+        const [port] = await freePorts(1);
+        descriptor.transports.pushpull = { client: `tcp://127.0.0.1:${port}`, server: `tcp://127.0.0.1:${port}` };
         server = new Service(descriptor, {}, {});
         worker1 = new Client(descriptor);
         worker2 = new Client(descriptor);
@@ -53,18 +48,21 @@ describe('PushPull Endpoint', () => {
         await delay(50);
     });
 
-    it('should distribute work to a single worker', async () => {
+    it('should deliver a task to one of the workers', async () => {
         const received = [];
 
+        // PUSH hands the task to whichever worker's turn it is, so listen on both
         const collectWork = new Promise((resolve) => {
             const handler = (msg) => {
                 received.push(msg.taskId);
                 if (received.length === 1) {
                     worker1.Work.removeListener('message', handler);
+                    worker2.Work.removeListener('message', handler);
                     resolve();
                 }
             };
             worker1.Work.on('message', handler);
+            worker2.Work.on('message', handler);
         });
 
         server.Work.push({

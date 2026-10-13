@@ -3,17 +3,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
-
-const BASE_PORT = 15100;
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        source: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        }
-    },
+    transports: {}, // a free port in before()
     endpoints: [
         {
             name: "Events",
@@ -35,10 +28,13 @@ describe('Source Endpoint (Pub/Sub)', () => {
     let client;
 
     before(async () => {
+        const [port] = await freePorts(1);
+        descriptor.transports.source = { client: `tcp://127.0.0.1:${port}`, server: `tcp://127.0.0.1:${port}` };
         server = new Service(descriptor, {}, {});
         client = new Client(descriptor);
 
         client.Events.subscribe();
+        await sourceConnected(client);
 
         // Give ZMQ time to establish subscription
         await delay(100);
@@ -96,6 +92,7 @@ describe('Source Endpoint (Pub/Sub)', () => {
     it('should support multiple subscribers', async () => {
         const client2 = new Client(descriptor);
         client2.Events.subscribe();
+        await sourceConnected(client2);
 
         await delay(100);
 

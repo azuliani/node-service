@@ -9,9 +9,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
-
-const BASE_PORT = 16200;
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
 const providersSchema = {
     type: 'object',
@@ -23,16 +21,16 @@ const providersSchema = {
     }
 };
 
-function createDescriptor(portOffset, objectSchema) {
+function createDescriptor([sourcePort, rpcPort], objectSchema) {
     return {
         transports: {
             source: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset}`
+                client: `tcp://127.0.0.1:${sourcePort}`,
+                server: `tcp://127.0.0.1:${sourcePort}`
             },
             rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`
+                client: `tcp://127.0.0.1:${rpcPort}`,
+                server: `tcp://127.0.0.1:${rpcPort}`
             }
         },
         endpoints: [
@@ -45,11 +43,11 @@ function createDescriptor(portOffset, objectSchema) {
     };
 }
 
-async function start(portOffset, objectSchema = providersSchema, initial = { providers: { mollybet: true, betfair: true } }) {
-    const descriptor = createDescriptor(portOffset, objectSchema);
+async function start(objectSchema = providersSchema, initial = { providers: { mollybet: true, betfair: true } }) {
+    const descriptor = createDescriptor(await freePorts(2), objectSchema);
     const server = new Service(descriptor, {}, { State: initial });
     const client = new Client(descriptor, { initDelay: 50 });
-    await delay(50);
+    await sourceConnected(client);
     return { server, client };
 }
 
@@ -68,7 +66,7 @@ async function subscribe(client) {
 
 describe('SharedObject dirtyBypass', () => {
     it('a notify after a bypass notify of the same subtree reaches connected clients', async () => {
-        const nodes = await start(0);
+        const nodes = await start();
         const { server, client } = nodes;
         try {
             await subscribe(client);
@@ -89,7 +87,7 @@ describe('SharedObject dirtyBypass', () => {
     });
 
     it('a client initialising after a bypass notify gets the state as of the last notify', async () => {
-        const nodes = await start(2);
+        const nodes = await start();
         const { server, client } = nodes;
         try {
             server.State.notify(['providers'], true);
@@ -109,7 +107,7 @@ describe('SharedObject dirtyBypass', () => {
 
     it('a notify after a bypass of one offer deep in the tree reaches connected clients', async () => {
         // TxPrices' shape: notify([glob, "ir", offer], true), then the offer object changes in place
-        const nodes = await start(4, { skip: true }, { games: { g1: { ir: { o1: { price: 2, provider: 'betfair' } } } } });
+        const nodes = await start({ skip: true }, { games: { g1: { ir: { o1: { price: 2, provider: 'betfair' } } } } });
         const { server, client } = nodes;
         try {
             await subscribe(client);
@@ -130,7 +128,7 @@ describe('SharedObject dirtyBypass', () => {
     });
 
     it('a bypass of a single value keeps that value as transmitted', async () => {
-        const nodes = await start(6);
+        const nodes = await start();
         const { server, client } = nodes;
         try {
             await subscribe(client);

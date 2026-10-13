@@ -10,21 +10,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
-
-const BASE_PORT = 16400;
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        source: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        },
-        rpc: {
-            client: `tcp://127.0.0.1:${BASE_PORT + 1}`,
-            server: `tcp://127.0.0.1:${BASE_PORT + 1}`
-        }
-    },
+    transports: {}, // free ports in before()
     endpoints: [
         {
             name: "State",
@@ -49,6 +38,9 @@ describe('SharedObject wire format', () => {
     const sent = [];
 
     before(async () => {
+        const [sourcePort, rpcPort] = await freePorts(2);
+        descriptor.transports.source = { client: `tcp://127.0.0.1:${sourcePort}`, server: `tcp://127.0.0.1:${sourcePort}` };
+        descriptor.transports.rpc = { client: `tcp://127.0.0.1:${rpcPort}`, server: `tcp://127.0.0.1:${rpcPort}` };
         server = new Service(descriptor, {}, {
             State: {
                 meta: { when: new Date('2026-10-10T14:00:00Z'), old: { seen: new Date('2026-10-10T13:00:00Z') } },
@@ -63,7 +55,7 @@ describe('SharedObject wire format', () => {
         };
 
         client = new Client(descriptor, { initDelay: 50 });
-        await delay(50);
+        await sourceConnected(client);
 
         const init = waitFor(client.State, 'init', 5000);
         client.State.subscribe();

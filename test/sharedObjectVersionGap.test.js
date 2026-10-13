@@ -3,20 +3,18 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
-const BASE_PORT = 15500;
-
-function createDescriptor(portOffset = 0) {
+function createDescriptor([sourcePort, rpcPort]) {
     return {
         transports: {
             source: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset}`
+                client: `tcp://127.0.0.1:${sourcePort}`,
+                server: `tcp://127.0.0.1:${sourcePort}`
             },
             rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`
+                client: `tcp://127.0.0.1:${rpcPort}`,
+                server: `tcp://127.0.0.1:${rpcPort}`
             }
         },
         endpoints: [
@@ -37,10 +35,10 @@ function createDescriptor(portOffset = 0) {
 describe('SharedObject Version Gap Bug', () => {
 
     it('should handle version gap in first message after init by re-initializing', async () => {
-        const descriptor = createDescriptor(0);
+        const descriptor = createDescriptor(await freePorts(2));
         const server = new Service(descriptor, {}, { State: { counter: 0 } });
         const client = new Client(descriptor, { initDelay: 50 });
-        await delay(50);
+        await sourceConnected(client);
 
         // Wrap _tryApply to catch assertion errors from buggy code
         // (The bug causes an assertion to throw in _tryApply called via setImmediate)

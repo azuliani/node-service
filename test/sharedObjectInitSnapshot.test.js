@@ -9,20 +9,18 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
-const BASE_PORT = 16000;
-
-function createDescriptor(portOffset) {
+function createDescriptor([sourcePort, rpcPort]) {
     return {
         transports: {
             source: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset}`
+                client: `tcp://127.0.0.1:${sourcePort}`,
+                server: `tcp://127.0.0.1:${sourcePort}`
             },
             rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`
+                client: `tcp://127.0.0.1:${rpcPort}`,
+                server: `tcp://127.0.0.1:${rpcPort}`
             }
         },
         endpoints: [
@@ -41,11 +39,11 @@ function createDescriptor(portOffset) {
     };
 }
 
-async function start(portOffset) {
-    const descriptor = createDescriptor(portOffset);
+async function start() {
+    const descriptor = createDescriptor(await freePorts(2));
     const server = new Service(descriptor, {}, { State: { a: 0, b: 0 } });
     const client = new Client(descriptor, { initDelay: 50 });
-    await delay(50);
+    await sourceConnected(client);
     return { server, client };
 }
 
@@ -64,7 +62,7 @@ async function subscribe(client) {
 
 describe('SharedObject init snapshot', () => {
     it('serves the state as of the last notify; a pending change arrives with the notify that covers it', async () => {
-        const nodes = await start(0);
+        const nodes = await start();
         const { server, client } = nodes;
         try {
             server.State.data.a = 1;
@@ -87,7 +85,7 @@ describe('SharedObject init snapshot', () => {
     });
 
     it('keeps a client in sync when it initialises while a change is pending that is undone before the next notify', async () => {
-        const nodes = await start(2);
+        const nodes = await start();
         const { server, client } = nodes;
         try {
             server.State.data.a = 1;

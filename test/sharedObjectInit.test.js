@@ -27,10 +27,11 @@ function createTransports(port) {
     };
 }
 
-function startHttpServer(port, handler) {
+// Listens on a free port from the OS: server.address().port
+function startHttpServer(handler) {
     return new Promise((resolve) => {
         const server = http.createServer(handler);
-        server.listen(port, '127.0.0.1', () => resolve(server));
+        server.listen(0, '127.0.0.1', () => resolve(server));
     });
 }
 
@@ -46,19 +47,28 @@ function jsonPost(handler) {
 
 describe('SharedObjectClient init resilience', () => {
 
-    it('should not make concurrent init requests when _initInFlight is true', async () => {
+    it('should not make concurrent init requests when _initInFlight is true', async (t) => {
         let requestCount = 0;
         const pendingResponses = [];
+        let gotRequest;
+        const firstRequest = new Promise(resolve => { gotRequest = resolve; });
 
-        const server = await startHttpServer(19002, jsonPost((parsed, res) => {
+        const server = await startHttpServer(jsonPost((parsed, res) => {
             requestCount++;
             pendingResponses.push(res);
+            gotRequest();
             // Hold the response — don't reply yet
         }));
 
-        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(19002), { initDelay: 10 });
+        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(server.address().port), { initDelay: 10 });
+        t.after(async () => {
+            client.unsubscribe();
+            for (const res of pendingResponses) res.end();
+            server.close();
+            await delay(50);
+        });
         client.subscribe();
-        await delay(50);
+        await firstRequest;
 
         assert.strictEqual(requestCount, 1, 'First _init() should have made exactly 1 request');
         assert.strictEqual(client._initInFlight, true, 'Init should be in flight');
@@ -76,24 +86,29 @@ describe('SharedObjectClient init resilience', () => {
 
         assert.strictEqual(client._initInFlight, false, 'Init should have completed');
         assert.strictEqual(client.data.value, 42);
-
-        client.unsubscribe();
-        server.close();
-        await delay(50);
     });
 
-    it('should not retry init after unsubscribe', async () => {
+    it('should not retry init after unsubscribe', async (t) => {
         let requestCount = 0;
+        let gotRequest;
+        const firstRequest = new Promise(resolve => { gotRequest = resolve; });
 
-        const server = await startHttpServer(19004, jsonPost((parsed, res) => {
+        const server = await startHttpServer(jsonPost((parsed, res) => {
             requestCount++;
             res.writeHead(404, {'Content-Type': 'application/json'});
             res.end(JSON.stringify({err: 'Not found'}));
+            gotRequest();
         }));
 
-        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(19004), { initDelay: 10 });
+        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(server.address().port), { initDelay: 10 });
+        t.after(async () => {
+            client.unsubscribe();
+            server.close();
+            await delay(50);
+        });
         client.subscribe();
-        await delay(100); // Wait for init to fail (404)
+        await firstRequest;
+        await delay(50); // Wait for the client to take the 404
 
         assert.strictEqual(requestCount, 1, 'Should have made 1 init request');
         assert.strictEqual(client._initInFlight, false, 'Init should have completed (failed)');
@@ -103,15 +118,12 @@ describe('SharedObjectClient init resilience', () => {
         await delay(1500); // Wait past the 1s retry window
 
         assert.strictEqual(requestCount, 1, 'No retry should occur after unsubscribe');
-
-        server.close();
-        await delay(50);
     });
 
-    it('should retry and succeed after init failure', async () => {
+    it('should retry and succeed after init failure', async (t) => {
         let requestCount = 0;
 
-        const server = await startHttpServer(19006, jsonPost((parsed, res) => {
+        const server = await startHttpServer(jsonPost((parsed, res) => {
             requestCount++;
             if (requestCount === 1) {
                 res.writeHead(500, {'Content-Type': 'application/json'});
@@ -122,7 +134,12 @@ describe('SharedObjectClient init resilience', () => {
             }
         }));
 
-        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(19006), { initDelay: 10 });
+        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(server.address().port), { initDelay: 10 });
+        t.after(async () => {
+            client.unsubscribe();
+            server.close();
+            await delay(50);
+        });
         const initPromise = waitFor(client, 'init', 5000);
         client.subscribe();
 
@@ -131,10 +148,6 @@ describe('SharedObjectClient init resilience', () => {
         assert.strictEqual(requestCount, 2, 'Should have made 2 requests (1 failed + 1 successful retry)');
         assert.strictEqual(client.data.value, 99);
         assert.strictEqual(client.ready, true);
-
-        client.unsubscribe();
-        server.close();
-        await delay(50);
     });
 
     it('should return error for unknown commands via SharedObjectService.call()', () => {
@@ -149,12 +162,15 @@ describe('SharedObjectClient init resilience', () => {
         assert.match(parsed.err, /badcommand/);
     });
 
-    it('should abort init fetch after configurable timeout', async () => {
+    it('should abort init fetch after configurable timeout', async (t) => {
         let requestCount = 0;
         const connections = new Set();
+        let gotRequest;
+        const firstRequest = new Promise(resolve => { gotRequest = resolve; });
 
-        const server = await startHttpServer(19008, jsonPost((parsed, res) => {
+        const server = await startHttpServer(jsonPost((parsed, res) => {
             requestCount++;
+            gotRequest();
             // Never respond — let AbortSignal.timeout fire
         }));
         server.on('connection', (conn) => {
@@ -162,12 +178,18 @@ describe('SharedObjectClient init resilience', () => {
             conn.on('close', () => connections.delete(conn));
         });
 
-        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(19008), {
+        const client = new SharedObjectClient(createEndpoint('Test'), createTransports(server.address().port), {
             initDelay: 10,
             initTimeout: 500
         });
+        t.after(async () => {
+            client.unsubscribe();
+            for (const conn of connections) conn.destroy();
+            server.close();
+            await delay(50);
+        });
         client.subscribe();
-        await delay(100);
+        await firstRequest;
 
         assert.strictEqual(requestCount, 1, 'Should have made 1 request');
         assert.strictEqual(client._initInFlight, true, 'Init should be in flight (waiting for timeout)');
@@ -176,11 +198,6 @@ describe('SharedObjectClient init resilience', () => {
 
         assert.strictEqual(client._initInFlight, false, 'Init should have completed after timeout');
         assert.strictEqual(client.ready, false, 'Should not be ready after timeout');
-
-        client.unsubscribe();
-        for (const conn of connections) conn.destroy();
-        server.close();
-        await delay(50);
     });
 
 });

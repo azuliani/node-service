@@ -3,17 +3,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
-
-const BASE_PORT = 15200;
+const { waitFor, delay, freePorts } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        sink: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        }
-    },
+    transports: {}, // a free port in before()
     endpoints: [
         {
             name: "Inbox",
@@ -36,6 +29,8 @@ describe('Sink Endpoint', () => {
     let client2;
 
     before(async () => {
+        const [port] = await freePorts(1);
+        descriptor.transports.sink = { client: `tcp://127.0.0.1:${port}`, server: `tcp://127.0.0.1:${port}` };
         server = new Service(descriptor, {}, {});
         client1 = new Client(descriptor);
         client2 = new Client(descriptor);

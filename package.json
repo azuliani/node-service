@@ -10,7 +10,7 @@
     "misc/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test --test-timeout=30000 test/*.test.js",
     "bench:nested": "node benchmark/nested-subobjects.js"
   },
   "repository": {

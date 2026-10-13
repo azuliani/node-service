@@ -3,20 +3,18 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { waitFor, delay } = require('./helpers');
+const { waitFor, delay, freePorts, sourceConnected } = require('./helpers');
 
-const BASE_PORT = 15700;
-
-function createDescriptor(portOffset = 0) {
+function createDescriptor([sourcePort, rpcPort]) {
     return {
         transports: {
             source: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset}`
+                client: `tcp://127.0.0.1:${sourcePort}`,
+                server: `tcp://127.0.0.1:${sourcePort}`
             },
             rpc: {
-                client: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`,
-                server: `tcp://127.0.0.1:${BASE_PORT + portOffset + 1}`
+                client: `tcp://127.0.0.1:${rpcPort}`,
+                server: `tcp://127.0.0.1:${rpcPort}`
             }
         },
         endpoints: [
@@ -42,10 +40,10 @@ describe('SharedObject Message Buffering', () => {
         // executes it returns the current server state, so buffered messages get skipped.
         // The key assertion here is that messages ARE buffered while init is delayed.
 
-        const descriptor = createDescriptor(0);
+        const descriptor = createDescriptor(await freePorts(2));
         const server = new Service(descriptor, {}, { State: { counter: 0 } });
         const client = new Client(descriptor, { initDelay: 50 });
-        await delay(50);
+        await sourceConnected(client);
 
         try {
             // Store original _init
@@ -130,10 +128,10 @@ describe('SharedObject Message Buffering', () => {
         // When init returns a version >= all buffered messages, those messages
         // should be skipped (they're already included in the init snapshot)
 
-        const descriptor = createDescriptor(10);
+        const descriptor = createDescriptor(await freePorts(2));
         const server = new Service(descriptor, {}, { State: { counter: 0 } });
         const client = new Client(descriptor, { initDelay: 9999 }); // Very long delay, we'll call _init manually
-        await delay(50);
+        await sourceConnected(client);
 
         try {
             // Manually set up the client's internal state to simulate:
@@ -144,6 +142,7 @@ describe('SharedObject Message Buffering', () => {
             // First, subscribe to ZMQ but don't init yet
             client.State._subscribed = true;
             client.State.updateTransport.subscribe("_SO_State");
+            await delay(50); // let the subscription reach the server
 
             // Ensure client is in fresh state
             client.State._flushData();
@@ -191,10 +190,10 @@ describe('SharedObject Message Buffering', () => {
         // Simulate: init returns v=0, but messages v=1,2,3 arrived and are buffered
         // After init completes, buffered messages should be applied
 
-        const descriptor = createDescriptor(20);
+        const descriptor = createDescriptor(await freePorts(2));
         const server = new Service(descriptor, {}, { State: { counter: 0 } });
         const client = new Client(descriptor, { initDelay: 9999 });
-        await delay(50);
+        await sourceConnected(client);
 
         try {
             // Subscribe to ZMQ without triggering init
@@ -271,15 +270,16 @@ describe('SharedObject Message Buffering', () => {
         // This tests the stale message check: if a message arrives with v <= this._v,
         // it should be silently ignored (not trigger a re-init)
 
-        const descriptor = createDescriptor(30);
+        const descriptor = createDescriptor(await freePorts(2));
         const server = new Service(descriptor, {}, { State: { counter: 0 } });
         const client = new Client(descriptor, { initDelay: 9999 });
-        await delay(50);
+        await sourceConnected(client);
 
         try {
             // Subscribe to ZMQ without auto-init
             client.State._subscribed = true;
             client.State.updateTransport.subscribe("_SO_State");
+            await delay(50); // let the subscription reach the server
             client.State._flushData();
 
             // Send some updates first so server version advances

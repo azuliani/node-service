@@ -3,17 +3,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { delay } = require('./helpers');
-
-const BASE_PORT = 15900;
+const { delay, freePorts } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        rpc: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        }
-    },
+    transports: {}, // a free port in before()
     endpoints: [
         {
             name: "DelayedEcho",
@@ -40,6 +33,8 @@ describe('RPC Parallel Processing', () => {
     let client;
 
     before(async () => {
+        const [port] = await freePorts(1);
+        descriptor.transports.rpc = { client: `tcp://127.0.0.1:${port}`, server: `tcp://127.0.0.1:${port}` };
         const handlers = {
             DelayedEcho: (req, reply) => {
                 setTimeout(() => {

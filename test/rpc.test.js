@@ -3,17 +3,10 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const { Service, Client } = require('../index');
-const { delay } = require('./helpers');
-
-const BASE_PORT = 15000;
+const { delay, freePorts } = require('./helpers');
 
 const descriptor = {
-    transports: {
-        rpc: {
-            client: `tcp://127.0.0.1:${BASE_PORT}`,
-            server: `tcp://127.0.0.1:${BASE_PORT}`
-        }
-    },
+    transports: {}, // a free port in before()
     endpoints: [
         {
             name: "Echo",
@@ -35,6 +28,8 @@ describe('RPC Endpoint', () => {
     let client;
 
     before(async () => {
+        const [port] = await freePorts(1);
+        descriptor.transports.rpc = { client: `tcp://127.0.0.1:${port}`, server: `tcp://127.0.0.1:${port}` };
         const handlers = {
             Echo: (req, reply) => {
                 reply(null, {
@@ -83,12 +78,13 @@ describe('RPC Endpoint', () => {
         }
     });
 
-    it('should timeout when server is unavailable', async () => {
+    it('should timeout when server is unavailable', async (t) => {
+        const [port] = await freePorts(1); // nothing listens there
         const noServerDescriptor = {
             transports: {
                 rpc: {
-                    client: `tcp://127.0.0.1:${BASE_PORT + 99}`,
-                    server: `tcp://127.0.0.1:${BASE_PORT + 99}`
+                    client: `tcp://127.0.0.1:${port}`,
+                    server: `tcp://127.0.0.1:${port}`
                 }
             },
             endpoints: [
@@ -102,6 +98,7 @@ describe('RPC Endpoint', () => {
         };
 
         const orphanClient = new Client(noServerDescriptor);
+        t.after(() => orphanClient.close());
 
         const result = await new Promise((resolve) => {
             orphanClient.Unreachable.call("test", 500, (err, res) => {
@@ -113,7 +110,5 @@ describe('RPC Endpoint', () => {
             result.err === 'timeout' || result.err.includes('ECONNREFUSED'),
             `Expected timeout or connection refused, got: ${result.err}`
         );
-
-        orphanClient.close();
     });
 });
